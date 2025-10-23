@@ -12,6 +12,7 @@ import {
 import { Image } from 'react-native';
 import { useSharedValue, useAnimatedStyle, interpolate, Extrapolation, type SharedValue } from 'react-native-reanimated';
 import Animated from 'react-native-reanimated';
+import { router } from 'expo-router';
 import { useOnboarding } from '@/hooks/use-onboarding';
 
 // Get screen dimensions for responsive design
@@ -216,15 +217,16 @@ export default function OnboardingScreenComponent() {
 
   /**
    * Complete onboarding process
-   * Navigate to main app (tabs)
+   * Navigate to authentication flow
    */
   const handleCompleteOnboarding = () => {
-    completeOnboarding();
+    // Navigate to get started screen instead of main app
+    router.push('/auth/get-started');
   };
 
   /**
    * Skip onboarding process
-   * Navigate directly to main app
+   * Navigate to authentication flow
    */
   const handleSkip = () => {
     handleCompleteOnboarding();
