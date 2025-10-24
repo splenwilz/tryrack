@@ -2,10 +2,10 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { SocialButton, PrimaryButton } from '@/components/auth/FormComponents';
@@ -15,7 +15,7 @@ import { SocialButton, PrimaryButton } from '@/components/auth/FormComponents';
  * First screen in the authentication flow, offering social login options
  * 
  * Features:
- * - Social login buttons (Google, Facebook, Apple)
+ * - Social login buttons (Google, Apple)
  * - Email sign in option
  * - Sign up navigation
  * - Clean, modern design matching the provided mockup
@@ -30,9 +30,9 @@ export default function GetStartedScreen() {
    * Handle social login
    * Initiates OAuth flow with the selected provider
    * 
-   * @param provider - Social provider ('google', 'facebook', 'apple')
+   * @param provider - Social provider ('google', 'apple')
    */
-  const handleSocialLogin = async (provider: 'google' | 'facebook' | 'apple') => {
+  const handleSocialLogin = async (provider: 'google' | 'apple') => {
     try {
       const result = await socialSignIn(provider);
       if (result.success) {
@@ -77,7 +77,7 @@ export default function GetStartedScreen() {
         
         {/* Subtitle */}
         <Text style={styles.subtitle}>
-          Welcome! Let's dive in your account
+          Welcome! Let&apos;s dive in your account
         </Text>
 
         {/* Social Login Buttons */}
@@ -85,12 +85,6 @@ export default function GetStartedScreen() {
           <SocialButton
             provider="google"
             onPress={() => handleSocialLogin('google')}
-            disabled={isLoading}
-          />
-          
-          <SocialButton
-            provider="facebook"
-            onPress={() => handleSocialLogin('facebook')}
             disabled={isLoading}
           />
           
@@ -111,7 +105,7 @@ export default function GetStartedScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <TouchableOpacity onPress={handleSignUp}>
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>

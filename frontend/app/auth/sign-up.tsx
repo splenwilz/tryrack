@@ -48,17 +48,34 @@ export default function SignUpScreen() {
 
   /**
    * Handle form submission for sign up
-   * Creates new user account and signs them in
+   * Creates new user account and handles email verification if required
    * 
    * @param data - Form data containing email, password, and confirmation
    */
   const onSubmit = async (data: SignUpFormData) => {
     try {
+      console.log('🔍 Sign Up Screen Debug - Starting sign up process');
       const result = await signUp(data.email, data.password, data.confirmPassword);
+      console.log('🔍 Sign Up Screen Debug - Sign up result:', result);
+      
       if (result.success) {
-        // Navigate to main app on successful sign up
-        router.replace('/(tabs)');
+        if (result.requiresVerification) {
+          console.log('🔍 Sign Up Screen Debug - Verification required, navigating to verification screen');
+          // Navigate to email verification screen with verification data
+          router.push({
+            pathname: '/auth/verify-email',
+            params: {
+              email: result.verificationData.email,
+              pendingToken: result.verificationData.pending_authentication_token,
+            }
+          });
+        } else {
+          console.log('🔍 Sign Up Screen Debug - No verification required, navigating to main app');
+          // Navigate to main app on successful sign up (no verification required)
+          router.replace('/(tabs)');
+        }
       } else {
+        console.log('🔍 Sign Up Screen Debug - Sign up failed:', result.error);
         // Set form error
         setError('root', {
           type: 'manual',

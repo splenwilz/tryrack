@@ -2,6 +2,24 @@
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
+## Environment Variables
+
+This app uses environment variables for configuration. Create a `.env` file in the frontend directory:
+
+```bash
+# API Configuration
+EXPO_PUBLIC_API_BASE_URL=http://172.20.10.2:8000
+
+# WorkOS Configuration  
+EXPO_PUBLIC_WORKOS_CLIENT_ID=client_01K86PVP3MEA1X2WZDKQYQP7HW
+
+# OAuth Configuration
+EXPO_PUBLIC_OAUTH_REDIRECT_SCHEME=frontend
+EXPO_PUBLIC_OAUTH_REDIRECT_PATH=auth/callback
+```
+
+**Note:** In Expo, environment variables must be prefixed with `EXPO_PUBLIC_` to be accessible in the client-side code.
+
 ## Get started
 
 1. Install dependencies
