@@ -26,6 +26,8 @@ const MAPPING = {
   'info.circle': 'info',
   'rectangle.portrait.and.arrow.right': 'logout',
   'tshirt.fill': 'checkroom',
+  'bag.fill': 'shopping-bag',
+  'heart.fill': 'favorite',
   'magnifyingglass': 'search',
   'bell': 'notifications',
   'bell.fill': 'notifications-active',

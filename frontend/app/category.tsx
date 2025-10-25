@@ -168,7 +168,8 @@ const mockWardrobeData = [
  * Uses URL parameters to determine which category to display
  */
 export default function CategoryView() {
-  const { category } = useLocalSearchParams<{ category: string }>();
+  const params = useLocalSearchParams<{ category?: string | string[] }>();
+  const category = Array.isArray(params.category) ? params.category[0] : params.category;
   
   // Handle special cases and filter items by category
   let categoryItems: typeof mockWardrobeData;

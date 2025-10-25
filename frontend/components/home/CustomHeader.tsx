@@ -6,14 +6,15 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 
-interface CustomHeaderProps {
+type CustomHeaderProps = {
   title: string;
   onSearchPress?: () => void;
   onNotificationPress?: () => void;
   notificationCount?: number;
-  showBackButton?: boolean;
-  onBackPress?: () => void;
-}
+} & (
+  | { showBackButton?: false; onBackPress?: never }
+  | { showBackButton: true; onBackPress: () => void }
+);
 
 /**
  * Custom Header Component for Wardrobe Screen
@@ -36,27 +37,33 @@ export const CustomHeader: React.FC<CustomHeaderProps> = ({
     <View style={[styles.header, { backgroundColor }]}>
       {/* Left side - Back button or Title */}
       <View style={styles.leftSection}>
-        {showBackButton ? (
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={onBackPress}
-            activeOpacity={0.7}
-          >
-            <IconSymbol
-              name="chevron.right"
-              size={24}
-              color={iconColor}
-              style={{ transform: [{ rotate: '180deg' }] }}
-            />
-            <ThemedText type="title" style={styles.title}>
-              {title}
-            </ThemedText>
-          </TouchableOpacity>
-        ) : (
+      {showBackButton ? (
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={onBackPress}
+          disabled={!onBackPress}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Navigates to the previous screen"
+          accessibilityState={{ disabled: !onBackPress }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.7}
+        >
+          <IconSymbol
+            name="chevron.right"
+            size={24}
+            color={iconColor}
+            style={{ transform: [{ rotate: '180deg' }] }}
+          />
           <ThemedText type="title" style={styles.title}>
             {title}
           </ThemedText>
-        )}
+        </TouchableOpacity>
+      ) : (
+        <ThemedText type="title" style={styles.title}>
+          {title}
+        </ThemedText>
+      )}
       </View>
 
       {/* Right side - Icons */}
@@ -65,6 +72,12 @@ export const CustomHeader: React.FC<CustomHeaderProps> = ({
         <TouchableOpacity
           style={styles.iconButton}
           onPress={onSearchPress}
+          disabled={!onSearchPress}
+          accessibilityRole="button"
+          accessibilityLabel="Search"
+          accessibilityHint="Opens search"
+          accessibilityState={{ disabled: !onSearchPress }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
           <IconSymbol
@@ -78,6 +91,12 @@ export const CustomHeader: React.FC<CustomHeaderProps> = ({
         <TouchableOpacity
           style={styles.iconButton}
           onPress={onNotificationPress}
+          disabled={!onNotificationPress}
+          accessibilityRole="button"
+          accessibilityLabel="Notifications"
+          accessibilityHint="Opens notifications"
+          accessibilityState={{ disabled: !onNotificationPress }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
           <View style={styles.notificationContainer}>
