@@ -45,7 +45,21 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const storedItems = await AsyncStorage.getItem(WISHLIST_STORAGE_KEY);
       if (storedItems) {
-        setWishlistItems(JSON.parse(storedItems));
+        const parsed: BoutiqueItem[] = JSON.parse(storedItems);
+        setWishlistItems(prev => {
+          // If no previous items, just return parsed
+          if (!prev.length) return parsed;
+          
+          // Merge stored items with current state to avoid data loss
+          const seen = new Set(prev.map(i => i.id));
+          const merged = [...prev];
+          for (const item of parsed) {
+            if (!seen.has(item.id)) {
+              merged.push(item);
+            }
+          }
+          return merged;
+        });
       }
     } catch (error) {
       console.error('Error loading wishlist:', error);
@@ -72,9 +86,10 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [isInitialized, saveWishlist]);
 
   const addToWishlist = (item: BoutiqueItem) => {
-    if (!isInWishlist(item.id)) {
-      setWishlistItems(prev => [...prev, item]);
-    }
+    setWishlistItems(prev => {
+      // Check if item already exists within the functional updater to prevent race conditions
+      return prev.some(i => i.id === item.id) ? prev : [...prev, item];
+    });
   };
 
   const removeFromWishlist = (itemId: string) => {

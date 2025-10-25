@@ -58,7 +58,11 @@ const WishlistItemCard: React.FC<{ item: BoutiqueItem }> = ({ item }) => {
   };
 
   return (
-    <TouchableOpacity style={[styles.itemCard, { backgroundColor }]} onPress={handleViewDetails}>
+    <View pointerEvents="box-none">
+      <TouchableOpacity 
+        style={[styles.itemCard, { backgroundColor }]} 
+        onPress={handleViewDetails}
+      >
       <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
       
       {/* Boutique Logo */}
@@ -113,6 +117,7 @@ const WishlistItemCard: React.FC<{ item: BoutiqueItem }> = ({ item }) => {
         </View>
       </View>
     </TouchableOpacity>
+    </View>
   );
 };
 

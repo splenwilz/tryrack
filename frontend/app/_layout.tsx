@@ -27,6 +27,8 @@ export default function RootLayout() {
             <Stack.Screen name="category" options={{ headerShown: false }} />
             <Stack.Screen name="shop-category" options={{ headerShown: false }} />
             <Stack.Screen name="virtual-tryon" options={{ headerShown: false }} />
+            <Stack.Screen name="style-insights" options={{ headerShown: false }} />
+            <Stack.Screen name="outfit-history" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>
           <StatusBar style="auto" />

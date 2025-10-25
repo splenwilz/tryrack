@@ -307,7 +307,11 @@ const BoutiqueDiscoveryCard: React.FC<{ item: BoutiqueDiscovery }> = ({ item }) 
   };
 
   return (
-    <TouchableOpacity style={[styles.discoveryCard, { backgroundColor }]} onPress={handleViewItem}>
+    <View pointerEvents="box-none">
+      <TouchableOpacity 
+        style={[styles.discoveryCard, { backgroundColor }]} 
+        onPress={handleViewItem}
+      >
       <View style={styles.discoveryImageContainer}>
         <Image source={{ uri: item.imageUrl }} style={styles.discoveryImage} />
         {item.isTrending && (
@@ -344,6 +348,7 @@ const BoutiqueDiscoveryCard: React.FC<{ item: BoutiqueDiscovery }> = ({ item }) 
         </View>
       </View>
     </TouchableOpacity>
+    </View>
   );
 };
 

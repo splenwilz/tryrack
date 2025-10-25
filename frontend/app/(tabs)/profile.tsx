@@ -15,6 +15,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
+import { ThemedText } from '@/components/themed-text';
 
 // Type definitions
 interface User {
@@ -41,6 +42,142 @@ interface Preferences {
   notifications: boolean;
   darkMode: boolean;
 }
+
+interface StyleInsight {
+  id: string;
+  title: string;
+  description: string;
+  value: string;
+  trend: 'up' | 'down' | 'stable';
+  icon: string;
+}
+
+interface OutfitHistory {
+  id: string;
+  date: string;
+  items: string[];
+  imageUrl: string;
+  occasion: string;
+  rating: number;
+}
+
+interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlocked: boolean;
+  progress?: number;
+  maxProgress?: number;
+}
+
+interface FashionStats {
+  totalOutfits: number;
+  favoriteColor: string;
+  mostWornItem: string;
+  styleScore: number;
+  sustainabilityScore: number;
+  itemsAddedThisMonth: number;
+}
+
+// Mock data for enhanced profile features
+const mockStyleInsights: StyleInsight[] = [
+  {
+    id: '1',
+    title: 'Style Evolution',
+    description: 'Your style has evolved 23% this month',
+    value: '+23%',
+    trend: 'up',
+    icon: 'arrow.up'
+  },
+  {
+    id: '2',
+    title: 'Color Palette',
+    description: 'Black is your most worn color',
+    value: '42%',
+    trend: 'stable',
+    icon: 'paintpalette'
+  },
+  {
+    id: '3',
+    title: 'Sustainability',
+    description: 'You\'re 15% more sustainable than last month',
+    value: '85%',
+    trend: 'up',
+    icon: 'leaf'
+  }
+];
+
+const mockOutfitHistory: OutfitHistory[] = [
+  {
+    id: '1',
+    date: '2024-01-15',
+    items: ['Black Blazer', 'White Shirt', 'Dark Jeans'],
+    imageUrl: 'https://images.unsplash.com/photo-1594938298605-c04c1c4d8f69?w=200&h=200&fit=crop',
+    occasion: 'Work Meeting',
+    rating: 4.5
+  },
+  {
+    id: '2',
+    date: '2024-01-14',
+    items: ['Navy Dress', 'Black Heels', 'Gold Necklace'],
+    imageUrl: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=200&h=200&fit=crop',
+    occasion: 'Date Night',
+    rating: 5.0
+  },
+  {
+    id: '3',
+    date: '2024-01-13',
+    items: ['White T-Shirt', 'Blue Jeans', 'White Sneakers'],
+    imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=200&h=200&fit=crop',
+    occasion: 'Casual Weekend',
+    rating: 4.0
+  }
+];
+
+const mockAchievements: Achievement[] = [
+  {
+    id: '1',
+    title: 'Style Explorer',
+    description: 'Try 10 different outfit combinations',
+    icon: 'star.fill',
+    unlocked: true
+  },
+  {
+    id: '2',
+    title: 'Sustainable Shopper',
+    description: 'Add 5 sustainable items to wardrobe',
+    icon: 'leaf.fill',
+    unlocked: true
+  },
+  {
+    id: '3',
+    title: 'Trend Setter',
+    description: 'Create 20 unique outfits',
+    icon: 'crown.fill',
+    unlocked: false,
+    progress: 15,
+    maxProgress: 20
+  },
+  {
+    id: '4',
+    title: 'Virtual Try-On Master',
+    description: 'Use virtual try-on 25 times',
+    icon: 'camera.fill',
+    unlocked: false,
+    progress: 8,
+    maxProgress: 25
+  }
+];
+
+const mockFashionStats: FashionStats = {
+  totalOutfits: 47,
+  favoriteColor: 'Black',
+  mostWornItem: 'White Cotton T-Shirt',
+  styleScore: 87,
+  sustainabilityScore: 92,
+  itemsAddedThisMonth: 3
+};
 
 /**
  * Profile Section Component
@@ -75,49 +212,204 @@ const ProfileSection: FC<{ user: User | null; colors: ColorScheme }> = ({ user, 
 );
 
 /**
- * Wardrobe Statistics Section
- * Shows user's wardrobe metrics and management options
+ * Style Insights Section
+ * Shows AI-powered style analytics and trends
  */
-const WardrobeSection: FC<{ colors: ColorScheme }> = ({ colors }) => (
+const StyleInsightsSection: FC<{ colors: ColorScheme }> = ({ colors }) => (
   <View style={[styles.section, { backgroundColor: colors.background }]}>
-    <Text style={[styles.sectionTitle, { color: colors.text }]}>
-      My Wardrobe
-    </Text>
+    <View style={styles.sectionHeader}>
+      <ThemedText type="subtitle" style={styles.sectionTitle}>
+        Style Insights
+      </ThemedText>
+      <TouchableOpacity onPress={() => router.push('/style-insights')}>
+        <ThemedText style={[styles.viewAllText, { color: colors.tint }]}>
+          View All
+        </ThemedText>
+      </TouchableOpacity>
+    </View>
+    
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightsScroll}>
+      {mockStyleInsights.map((insight) => (
+        <View key={insight.id} style={[styles.insightCard, { backgroundColor: colors.background }]}>
+          <View style={styles.insightHeader}>
+            <IconSymbol 
+              name={insight.icon as 'arrow.up' | 'paintpalette' | 'leaf'} 
+              size={20} 
+              color={insight.trend === 'up' ? '#4CAF50' : insight.trend === 'down' ? '#FF5722' : colors.tint} 
+            />
+            <ThemedText style={[styles.insightValue, { color: colors.tint }]}>
+              {insight.value}
+            </ThemedText>
+          </View>
+          <ThemedText style={styles.insightTitle}>{insight.title}</ThemedText>
+          <ThemedText style={[styles.insightDescription, { color: colors.tabIconDefault }]}>
+            {insight.description}
+          </ThemedText>
+        </View>
+      ))}
+    </ScrollView>
+  </View>
+);
+
+/**
+ * Fashion Statistics Section
+ * Shows comprehensive wardrobe and style metrics
+ */
+const FashionStatsSection: FC<{ colors: ColorScheme; stats: FashionStats }> = ({ colors, stats }) => (
+  <View style={[styles.section, { backgroundColor: colors.background }]}>
+    <ThemedText type="subtitle" style={styles.sectionTitle}>
+      Fashion Analytics
+    </ThemedText>
     
     <View style={styles.statsGrid}>
       <View style={[styles.statItem, { backgroundColor: colors.background }]}>
-        <Text style={[styles.statNumber, { color: colors.tint }]}>24</Text>
-        <Text style={[styles.statLabel, { color: colors.tabIconDefault }]}>
-          Total Items
-        </Text>
+        <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
+          {stats.totalOutfits}
+        </ThemedText>
+        <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
+          Total Outfits
+        </ThemedText>
       </View>
       
       <View style={[styles.statItem, { backgroundColor: colors.background }]}>
-        <Text style={[styles.statNumber, { color: colors.tint }]}>8</Text>
-        <Text style={[styles.statLabel, { color: colors.tabIconDefault }]}>
-          Saved Outfits
-        </Text>
+        <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
+          {stats.styleScore}%
+        </ThemedText>
+        <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
+          Style Score
+        </ThemedText>
       </View>
       
       <View style={[styles.statItem, { backgroundColor: colors.background }]}>
-        <Text style={[styles.statNumber, { color: colors.tint }]}>12</Text>
-        <Text style={[styles.statLabel, { color: colors.tabIconDefault }]}>
-          Try-Ons
-        </Text>
+        <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
+          {stats.sustainabilityScore}%
+        </ThemedText>
+        <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
+          Sustainability
+        </ThemedText>
       </View>
       
       <View style={[styles.statItem, { backgroundColor: colors.background }]}>
-        <Text style={[styles.statNumber, { color: colors.tint }]}>3</Text>
-        <Text style={[styles.statLabel, { color: colors.tabIconDefault }]}>
-          Purchases
-        </Text>
+        <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
+          {stats.itemsAddedThisMonth}
+        </ThemedText>
+        <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
+          Items Added This Month
+        </ThemedText>
       </View>
     </View>
 
-    <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.tint }]}>
-      <IconSymbol name="plus" size={20} color="white" />
-      <Text style={styles.actionButtonText}>Add Items</Text>
-    </TouchableOpacity>
+    <View style={styles.quickStats}>
+      <View style={styles.quickStatItem}>
+        <IconSymbol name="paintpalette" size={16} color={colors.tint} />
+        <ThemedText style={[styles.quickStatText, { color: colors.text }]}>
+          Favorite Color: {stats.favoriteColor}
+        </ThemedText>
+      </View>
+      <View style={styles.quickStatItem}>
+        <IconSymbol name="star.fill" size={16} color={colors.tint} />
+        <ThemedText style={[styles.quickStatText, { color: colors.text }]}>
+          Most Worn: {stats.mostWornItem}
+        </ThemedText>
+      </View>
+    </View>
+  </View>
+);
+
+/**
+ * Outfit History Section
+ * Shows recent outfit combinations and ratings
+ */
+const OutfitHistorySection: FC<{ colors: ColorScheme }> = ({ colors }) => (
+  <View style={[styles.section, { backgroundColor: colors.background }]}>
+    <View style={styles.sectionHeader}>
+      <ThemedText type="subtitle" style={styles.sectionTitle}>
+        Recent Outfits
+      </ThemedText>
+      <TouchableOpacity onPress={() => router.push('/outfit-history')}>
+        <ThemedText style={[styles.viewAllText, { color: colors.tint }]}>
+          View All
+        </ThemedText>
+      </TouchableOpacity>
+    </View>
+    
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.outfitScroll}>
+      {mockOutfitHistory.map((outfit) => (
+        <TouchableOpacity key={outfit.id} style={[styles.outfitCard, { backgroundColor: colors.background }]}>
+          <Image source={{ uri: outfit.imageUrl }} style={styles.outfitImage} />
+          <View style={styles.outfitInfo}>
+            <ThemedText style={styles.outfitDate}>{outfit.date}</ThemedText>
+            <ThemedText style={[styles.outfitOccasion, { color: colors.tabIconDefault }]}>
+              {outfit.occasion}
+            </ThemedText>
+            <View style={styles.outfitRating}>
+              <IconSymbol name="star.fill" size={12} color="#FFD700" />
+              <ThemedText style={styles.ratingText}>{outfit.rating}</ThemedText>
+            </View>
+          </View>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  </View>
+);
+
+/**
+ * Achievements Section
+ * Shows fashion-related achievements and progress
+ */
+const AchievementsSection: FC<{ colors: ColorScheme }> = ({ colors }) => (
+  <View style={[styles.section, { backgroundColor: colors.background }]}>
+    <ThemedText type="subtitle" style={styles.sectionTitle}>
+      Achievements
+    </ThemedText>
+    
+    <View style={styles.achievementsGrid}>
+      {mockAchievements.map((achievement) => (
+        <TouchableOpacity 
+          key={achievement.id} 
+          style={[
+            styles.achievementCard, 
+            { 
+              backgroundColor: colors.background,
+              opacity: achievement.unlocked ? 1 : 0.6
+            }
+          ]}
+        >
+          <View style={[
+            styles.achievementIcon, 
+            { backgroundColor: achievement.unlocked ? colors.tint : colors.tabIconDefault }
+          ]}>
+            <IconSymbol 
+              name={achievement.icon as 'star.fill' | 'leaf.fill' | 'crown.fill' | 'camera.fill'} 
+              size={24} 
+              color="white" 
+            />
+          </View>
+          <View style={styles.achievementInfo}>
+            <ThemedText style={[
+              styles.achievementTitle,
+              { color: achievement.unlocked ? colors.text : colors.tabIconDefault }
+            ]}>
+              {achievement.title}
+            </ThemedText>
+            <ThemedText style={[styles.achievementDescription, { color: colors.tabIconDefault }]}>
+              {achievement.description}
+            </ThemedText>
+            {!achievement.unlocked && achievement.progress && (
+              <View style={styles.progressBar}>
+                <View style={[
+                  styles.progressFill, 
+                  { 
+                    width: `${achievement.maxProgress ? (achievement.progress / achievement.maxProgress) * 100 : 0}%`,
+                    backgroundColor: colors.tint
+                  }
+                ]} />
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      ))}
+    </View>
   </View>
 );
 
@@ -318,7 +610,10 @@ export default function ProfileScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <ProfileSection user={user} colors={colors} />
-        <WardrobeSection colors={colors} />
+        <StyleInsightsSection colors={colors} />
+        <FashionStatsSection colors={colors} stats={mockFashionStats} />
+        <OutfitHistorySection colors={colors} />
+        <AchievementsSection colors={colors} />
         <PreferencesSection 
           preferences={preferences} 
           colors={colors} 
@@ -475,5 +770,154 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  // Enhanced Profile Styles
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // Style Insights Styles
+  insightsScroll: {
+    paddingRight: 20,
+  },
+  insightCard: {
+    width: 160,
+    marginRight: 12,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  insightValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  insightTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  insightDescription: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  // Fashion Stats Styles
+  quickStats: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E7',
+  },
+  quickStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  quickStatText: {
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  // Outfit History Styles
+  outfitScroll: {
+    paddingRight: 20,
+  },
+  outfitCard: {
+    width: 140,
+    marginRight: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  outfitImage: {
+    width: '100%',
+    height: 100,
+  },
+  outfitInfo: {
+    padding: 12,
+  },
+  outfitDate: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  outfitOccasion: {
+    fontSize: 11,
+    marginBottom: 6,
+  },
+  outfitRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
+    fontSize: 12,
+    marginLeft: 4,
+    fontWeight: '600',
+  },
+  // Achievements Styles
+  achievementsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  achievementCard: {
+    width: '48%',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  achievementIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  achievementInfo: {
+    flex: 1,
+  },
+  achievementTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  achievementDescription: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: '#E5E5E7',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
 });

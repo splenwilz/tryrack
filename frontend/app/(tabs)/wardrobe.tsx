@@ -195,6 +195,7 @@ const mockWardrobeData: WardrobeItem[] = [
 ];
 
 
+
 // Wardrobe Item Card Component - displays personal wardrobe items
 const WardrobeItemCard: React.FC<{ item: WardrobeItem }> = ({ item }) => {
   const backgroundColor = useThemeColor({}, 'background');
@@ -329,8 +330,8 @@ export default function WardrobeScreen() {
   const accessoryItems = mockWardrobeData.filter(item => item.category === 'accessories');
   const underwearItems = mockWardrobeData.filter(item => item.category === 'underwear');
   
-  // Featured item (first outerwear item)
-  const featuredItem = outerwearItems[0];
+  // Featured item (first outerwear item, if available)
+  const featuredItem = outerwearItems.length > 0 ? outerwearItems[0] : null;
 
   // Mock notification count - in real app this would come from state/API
   const notificationCount = 3;
@@ -350,7 +351,7 @@ export default function WardrobeScreen() {
     router.push(`/category?category=${category}`);
   };
 
-  // Show empty state if no items
+  // Show empty state if no items (for new users)
   if (mockWardrobeData.length === 0) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
