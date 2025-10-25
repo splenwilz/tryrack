@@ -4,8 +4,13 @@ import { Platform } from 'react-native';
 
 /**
  * Secure Storage Utility
- * Provides secure storage for sensitive authentication data using expo-secure-store
- * Falls back to AsyncStorage for non-sensitive data and web platform
+ * Provides secure storage for sensitive authentication data and PII using expo-secure-store
+ * Falls back to AsyncStorage only for web platform compatibility
+ * 
+ * SECURITY: All user data (email, username, names) is encrypted using platform-specific secure storage
+ * - iOS: Keychain Services
+ * - Android: EncryptedSharedPreferences
+ * - Web: AsyncStorage (less secure but necessary for web compatibility)
  * 
  * @see https://docs.expo.dev/versions/latest/sdk/securestore/ - Official Expo SecureStore documentation
  * @see https://github.com/expo/expo/blob/main/docs/pages/guides/authentication.mdx - Authentication best practices
@@ -15,7 +20,7 @@ import { Platform } from 'react-native';
 const STORAGE_KEYS = {
   ACCESS_TOKEN: 'secure_access_token',
   REFRESH_TOKEN: 'secure_refresh_token', // For future token refresh implementation
-  USER_DATA: 'user_data', // Non-sensitive user profile data
+  USER_DATA: 'secure_user_data', // Sensitive user profile data (PII)
 } as const;
 
 /**
@@ -157,24 +162,24 @@ export async function removeRefreshToken(): Promise<void> {
 }
 
 /**
- * Stores user profile data
- * User profile data is non-sensitive and can use AsyncStorage
+ * Stores user profile data securely
+ * User profile data contains PII (email, username, names) and must be encrypted
  * 
- * @param userData - User profile object
+ * @param userData - User profile object containing PII
  * @returns Promise that resolves when data is stored
  */
 export async function storeUserData(userData: object): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
+  await setSecureItem(STORAGE_KEYS.USER_DATA, userData);
 }
 
 /**
- * Retrieves stored user profile data
+ * Retrieves stored user profile data securely
  * 
  * @returns Promise that resolves with user data or null
  */
 export async function getUserData(): Promise<object | null> {
   try {
-    const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
+    const userData = await getSecureItem(STORAGE_KEYS.USER_DATA);
     return userData ? JSON.parse(userData) : null;
   } catch (error) {
     console.error('Error parsing user data:', error);
@@ -183,13 +188,13 @@ export async function getUserData(): Promise<object | null> {
 }
 
 /**
- * Removes stored user profile data
+ * Removes stored user profile data securely
  * Called during logout to clear user state
  * 
  * @returns Promise that resolves when data is removed
  */
 export async function removeUserData(): Promise<void> {
-  await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
+  await removeSecureItem(STORAGE_KEYS.USER_DATA);
 }
 
 /**
@@ -214,7 +219,8 @@ export async function clearAllAuthData(): Promise<void> {
 
 /**
  * Validates if a stored access token exists and is not expired
- * Basic token validation - in production, you might want to decode and check expiration
+ * Performs comprehensive JWT validation including expiration check
+ * Automatically clears expired tokens to prevent authentication issues
  * 
  * @returns Promise that resolves with validation result
  */
@@ -229,16 +235,42 @@ export async function validateStoredToken(): Promise<boolean> {
       return false;
     }
     
-    // Basic token validation - check if it's a valid JWT format
-    // In production, you might want to decode the token and check expiration
+    // Validate JWT format
     const parts = token.split('.');
     if (parts.length !== 3) {
       console.warn('🔍 SecureStorage Debug - Invalid token format');
       return false;
     }
     
-    console.log('🔍 SecureStorage Debug - Token format valid');
-    return true;
+    // Decode JWT payload to check expiration
+    try {
+      const payload = JSON.parse(atob(parts[1]));
+      console.log('🔍 SecureStorage Debug - Token payload decoded');
+      
+      // Check if token has expiration claim
+      if (!payload.exp) {
+        console.warn('🔍 SecureStorage Debug - Token missing expiration claim');
+        return false;
+      }
+      
+      // Check if token is expired
+      const currentTime = Math.floor(Date.now() / 1000);
+      const expirationTime = payload.exp;
+      
+      if (currentTime >= expirationTime) {
+        console.warn('🔍 SecureStorage Debug - Token expired, clearing stored data');
+        console.log('🔍 SecureStorage Debug - Current time:', currentTime, 'Expiration:', expirationTime);
+        // Clear expired token and user data to prevent authentication issues
+        await clearAllAuthData();
+        return false;
+      }
+      
+      console.log('🔍 SecureStorage Debug - Token is valid and not expired');
+      return true;
+    } catch (decodeError) {
+      console.error('🔍 SecureStorage Debug - Error decoding token:', decodeError);
+      return false;
+    }
   } catch (error) {
     console.error('🔍 SecureStorage Debug - Error validating token:', error);
     return false;

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
 
 /**
  * Custom hook to manage onboarding state
@@ -35,22 +34,17 @@ export const useOnboarding = () => {
 
   /**
    * Mark onboarding as completed
-   * Saves to AsyncStorage and navigates to main app
+   * Saves to AsyncStorage (navigation handled by root component)
    */
   const completeOnboarding = async () => {
     try {
       await AsyncStorage.setItem('onboardingCompleted', 'true');
       setHasCompletedOnboarding(true);
-      // Use setTimeout to avoid navigation during render
-      setTimeout(() => {
-        router.replace('/(tabs)');
-      }, 100);
+      // Navigation is handled by app/index.tsx to prevent race conditions
     } catch (error) {
       console.error('Error completing onboarding:', error);
-      // Still navigate even if storage fails
-      setTimeout(() => {
-        router.replace('/(tabs)');
-      }, 100);
+      // Still set state even if storage fails
+      setHasCompletedOnboarding(true);
     }
   };
 

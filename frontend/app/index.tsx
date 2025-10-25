@@ -26,8 +26,13 @@ export default function Index() {
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) {
-        // User not authenticated, redirect to sign-in
-        router.replace('/auth/sign-in');
+        if (hasCompletedOnboarding) {
+          // User not authenticated but onboarding completed, go to sign-in
+          router.replace('/auth/sign-in');
+        } else {
+          // User not authenticated and onboarding not completed, show onboarding
+          // Don't navigate here, just show onboarding screen
+        }
       } else if (!hasCompletedOnboarding) {
         // User authenticated but onboarding not completed, show onboarding
         // Don't navigate here, just show onboarding screen
@@ -49,6 +54,15 @@ export default function Index() {
 
   // If user is authenticated and onboarding is completed, show loading while navigating
   if (isAuthenticated && hasCompletedOnboarding) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  // If user is not authenticated and onboarding is completed, show loading while navigating to auth
+  if (!isAuthenticated && hasCompletedOnboarding) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
