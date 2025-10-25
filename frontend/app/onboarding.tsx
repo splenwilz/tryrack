@@ -217,19 +217,21 @@ export default function OnboardingScreenComponent() {
 
   /**
    * Complete onboarding process
-   * Navigate to authentication flow
+   * Save completion status and navigate to authentication flow
    */
-  const handleCompleteOnboarding = () => {
-    // Navigate to get started screen instead of main app
+  const handleCompleteOnboarding = async () => {
+    // Mark onboarding as completed in storage
+    await completeOnboarding();
+    // Navigate to get started screen
     router.push('/auth/get-started');
   };
 
   /**
    * Skip onboarding process
-   * Navigate to authentication flow
+   * Save completion status and navigate to authentication flow
    */
-  const handleSkip = () => {
-    handleCompleteOnboarding();
+  const handleSkip = async () => {
+    await handleCompleteOnboarding();
   };
 
   return (

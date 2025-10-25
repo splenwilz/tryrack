@@ -15,80 +15,70 @@ export const useOnboarding = () => {
   /**
    * Check if user has completed onboarding
    * Reads from AsyncStorage on app launch
-   * 
-   * DISABLED FOR TESTING: Always show onboarding screen
    */
   useEffect(() => {
-    // DISABLED FOR TESTING - Always show onboarding
-    // const checkOnboardingStatus = async () => {
-    //   try {
-    //     const onboardingCompleted = await AsyncStorage.getItem('onboardingCompleted');
-    //     setHasCompletedOnboarding(onboardingCompleted === 'true');
-    //   } catch (error) {
-    //     console.error('Error checking onboarding status:', error);
-    //     // Default to showing onboarding if there's an error
-    //     setHasCompletedOnboarding(false);
-    //   } finally {
-    //     setIsLoading(false);
-    //   }
-    // };
+    const checkOnboardingStatus = async () => {
+      try {
+        const onboardingCompleted = await AsyncStorage.getItem('onboardingCompleted');
+        setHasCompletedOnboarding(onboardingCompleted === 'true');
+      } catch (error) {
+        console.error('Error checking onboarding status:', error);
+        // Default to showing onboarding if there's an error
+        setHasCompletedOnboarding(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    // checkOnboardingStatus();
-    
-    // FOR TESTING: Always show onboarding screen
-    setHasCompletedOnboarding(false);
-    setIsLoading(false);
+    checkOnboardingStatus();
   }, []);
 
   /**
    * Mark onboarding as completed
    * Saves to AsyncStorage and navigates to main app
-   * 
-   * DISABLED FOR TESTING: Just navigate without saving
    */
   const completeOnboarding = async () => {
-    // DISABLED FOR TESTING - Don't save to AsyncStorage
-    // try {
-    //   await AsyncStorage.setItem('onboardingCompleted', 'true');
-    //   setHasCompletedOnboarding(true);
-    //   // Use setTimeout to avoid navigation during render
-    //   setTimeout(() => {
-    //     router.replace('/(tabs)');
-    //   }, 100);
-    // } catch (error) {
-    //   console.error('Error completing onboarding:', error);
-    //   // Still navigate even if storage fails
-    //   setTimeout(() => {
-    //     router.replace('/(tabs)');
-    //   }, 100);
-    // }
-
-    // FOR TESTING: Just navigate without saving
-    console.log('Onboarding completed (testing mode)');
-    setHasCompletedOnboarding(true);
-    setTimeout(() => {
-      router.replace('/(tabs)');
-    }, 100);
+    try {
+      await AsyncStorage.setItem('onboardingCompleted', 'true');
+      setHasCompletedOnboarding(true);
+      // Use setTimeout to avoid navigation during render
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 100);
+    } catch (error) {
+      console.error('Error completing onboarding:', error);
+      // Still navigate even if storage fails
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 100);
+    }
   };
 
   /**
    * Reset onboarding status (useful for testing)
    * Removes from AsyncStorage
-   * 
-   * DISABLED FOR TESTING: No-op function
    */
   const resetOnboarding = async () => {
-    // DISABLED FOR TESTING - Don't interact with AsyncStorage
-    // try {
-    //   await AsyncStorage.removeItem('onboardingCompleted');
-    //   setHasCompletedOnboarding(false);
-    // } catch (error) {
-    //   console.error('Error resetting onboarding:', error);
-    // }
+    try {
+      await AsyncStorage.removeItem('onboardingCompleted');
+      setHasCompletedOnboarding(false);
+    } catch (error) {
+      console.error('Error resetting onboarding:', error);
+    }
+  };
 
-    // FOR TESTING: Just reset state
-    console.log('Onboarding reset (testing mode)');
-    setHasCompletedOnboarding(false);
+  /**
+   * Debug function to manually mark onboarding as completed
+   * Useful for testing or fixing cases where onboarding wasn't properly saved
+   */
+  const markOnboardingCompleted = async () => {
+    try {
+      await AsyncStorage.setItem('onboardingCompleted', 'true');
+      setHasCompletedOnboarding(true);
+      console.log('🔍 Onboarding Debug - Manually marked as completed');
+    } catch (error) {
+      console.error('🔍 Onboarding Debug - Error marking as completed:', error);
+    }
   };
 
   return {
@@ -96,5 +86,6 @@ export const useOnboarding = () => {
     hasCompletedOnboarding,
     completeOnboarding,
     resetOnboarding,
+    markOnboardingCompleted, // Add this for debugging
   };
 };

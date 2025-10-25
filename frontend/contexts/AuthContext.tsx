@@ -1,8 +1,14 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoogleOAuth, type OAuthResponse } from '@/hooks/useGoogleOAuth';
 import { useAppleOAuth } from '@/hooks/useAppleOAuth';
 import { API_CONFIG } from '@/constants/config';
+import { 
+  storeAccessToken, 
+  storeUserData, 
+  getUserData, 
+  clearAllAuthData, 
+  validateStoredToken 
+} from '@/utils/secureStorage';
 
 /**
  * Authentication Context Types
@@ -73,17 +79,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   /**
    * Check for existing authentication on app launch
-   * Reads stored auth data from AsyncStorage
+   * Validates stored tokens and user data using secure storage
+   * 
+   * @see https://docs.expo.dev/versions/latest/sdk/securestore/ - Secure storage implementation
    */
   useEffect(() => {
     const checkAuthState = async () => {
       try {
-        const storedUser = await AsyncStorage.getItem('user');
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
+        console.log('🔍 Auth Debug - Starting auth state check');
+        
+        // Validate stored access token first
+        console.log('🔍 Auth Debug - Validating stored token');
+        const isTokenValid = await validateStoredToken();
+        console.log('🔍 Auth Debug - Token valid:', isTokenValid);
+        
+        if (isTokenValid) {
+          // Token is valid, restore user data
+          console.log('🔍 Auth Debug - Getting user data');
+          const storedUser = await getUserData();
+          console.log('🔍 Auth Debug - Stored user:', storedUser);
+          if (storedUser) {
+            setUser(storedUser as User);
+          }
+        } else {
+          // Token is invalid or missing, clear all auth data
+          console.log('🔍 Auth Debug - Token invalid, clearing auth data');
+          await clearAllAuthData();
         }
       } catch (error) {
-        console.error('Error checking auth state:', error);
+        console.error('🔍 Auth Debug - Error checking auth state:', error);
+        // On error, clear all auth data to ensure clean state
+        await clearAllAuthData();
       } finally {
         setIsLoading(false);
       }
@@ -137,11 +163,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
       
       setUser(userData);
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
       
-      // Store access token for API calls
-      // Based on JWT token handling best practices
-      await AsyncStorage.setItem('access_token', data.access_token);
+      // Store user data and access token securely
+      // Based on Expo SecureStore documentation for sensitive data
+      await Promise.all([
+        storeUserData(userData),
+        storeAccessToken(data.access_token)
+      ]);
       
       return { success: true };
     } catch (error) {
@@ -266,10 +294,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
       
       setUser(userData);
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
       
-      // Store access token for API calls
-      await AsyncStorage.setItem('access_token', data.access_token);
+      // Store user data and access token securely
+      // Based on Expo SecureStore documentation for sensitive data
+      await Promise.all([
+        storeUserData(userData),
+        storeAccessToken(data.access_token)
+      ]);
       
       return { success: true };
     } catch (error) {
@@ -285,13 +316,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   /**
    * Sign out user
-   * Clears user data and authentication state
+   * Clears all user data and authentication state using secure storage
+   * 
+   * @see https://docs.expo.dev/versions/latest/sdk/securestore/ - Secure storage cleanup
    */
   const signOut = async (): Promise<void> => {
     try {
       setIsLoading(true);
       setUser(null);
-      await AsyncStorage.removeItem('user');
+      
+      // Clear all authentication data securely
+      // Based on Expo SecureStore documentation for comprehensive cleanup
+      await clearAllAuthData();
     } catch (error) {
       console.error('Sign out error:', error);
     } finally {
@@ -336,11 +372,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
         
         setUser(userData);
-        await AsyncStorage.setItem('user', JSON.stringify(userData));
         
-        // Store access token for API calls
-        // Based on JWT token handling best practices
-        await AsyncStorage.setItem('access_token', oauthResult.access_token);
+        // Store user data and access token securely
+        // Based on Expo SecureStore documentation for sensitive data
+        await Promise.all([
+          storeUserData(userData),
+          storeAccessToken(oauthResult.access_token)
+        ]);
         
         return { success: true };
       } else {
@@ -438,10 +476,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
       
       setUser(userData);
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
       
-      // Store access token for API calls
-      await AsyncStorage.setItem('access_token', data.access_token);
+      // Store user data and access token securely
+      // Based on Expo SecureStore documentation for sensitive data
+      await Promise.all([
+        storeUserData(userData),
+        storeAccessToken(data.access_token)
+      ]);
       
       return { success: true };
     } catch (error) {

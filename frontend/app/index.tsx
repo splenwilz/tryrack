@@ -1,30 +1,44 @@
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useEffect } from 'react';
 import { useOnboarding } from '@/hooks/use-onboarding';
+import { useAuth } from '@/contexts/AuthContext';
 import OnboardingScreenComponent from './onboarding';
 import { router } from 'expo-router';
 
 /**
  * Root Index Component
- * Handles initial app navigation based on onboarding status
+ * Handles initial app navigation based on authentication and onboarding status
  * 
  * Features:
- * - Shows loading screen while checking onboarding status
- * - Redirects to onboarding if not completed
- * - Redirects to main app if onboarding is completed
+ * - Shows loading screen while checking authentication and onboarding status
+ * - Redirects to sign-in if not authenticated
+ * - Redirects to onboarding if authenticated but onboarding not completed
+ * - Redirects to main app if authenticated and onboarding completed
  * - Handles navigation state management
  */
 export default function Index() {
-  const { isLoading, hasCompletedOnboarding } = useOnboarding();
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { isLoading: onboardingLoading, hasCompletedOnboarding } = useOnboarding();
 
-  // Handle navigation when onboarding status changes
+  const isLoading = authLoading || onboardingLoading;
+
+  // Handle navigation based on authentication and onboarding status
   useEffect(() => {
-    if (!isLoading && hasCompletedOnboarding) {
-      router.replace('/(tabs)');
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        // User not authenticated, redirect to sign-in
+        router.replace('/auth/sign-in');
+      } else if (!hasCompletedOnboarding) {
+        // User authenticated but onboarding not completed, show onboarding
+        // Don't navigate here, just show onboarding screen
+      } else {
+        // User authenticated and onboarding completed, go to main app
+        router.replace('/(tabs)');
+      }
     }
-  }, [isLoading, hasCompletedOnboarding]);
+  }, [isLoading, isAuthenticated, hasCompletedOnboarding]);
 
-  // Show loading screen while checking onboarding status
+  // Show loading screen while checking authentication and onboarding status
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -33,8 +47,8 @@ export default function Index() {
     );
   }
 
-  // If onboarding is completed, show loading while navigating
-  if (hasCompletedOnboarding) {
+  // If user is authenticated and onboarding is completed, show loading while navigating
+  if (isAuthenticated && hasCompletedOnboarding) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -42,7 +56,16 @@ export default function Index() {
     );
   }
 
-  // Show onboarding screen
+  // If user is not authenticated, show loading while navigating to sign-in
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  // Show onboarding screen (user is authenticated but onboarding not completed)
   return <OnboardingScreenComponent />;
 }
 
