@@ -260,24 +260,32 @@ const FilterModal: React.FC<{
             <ThemedText type="subtitle" style={styles.filterSectionTitle}>Price Range</ThemedText>
             <View style={styles.priceRangeContainer}>
               <TextInput
-                style={styles.priceInput}
+                style={[styles.priceInput, { color: useThemeColor({}, 'text') }]}
                 placeholder="Min"
                 value={localFilters.priceRange.min.toString()}
-                onChangeText={(text) => setLocalFilters({
-                  ...localFilters,
-                  priceRange: { ...localFilters.priceRange, min: parseInt(text) || 0 }
-                })}
+                onChangeText={(text) => {
+                  const numValue = parseInt(text);
+                  const validValue = Number.isNaN(numValue) ? 0 : Math.max(0, numValue);
+                  setLocalFilters({
+                    ...localFilters,
+                    priceRange: { ...localFilters.priceRange, min: validValue }
+                  });
+                }}
                 keyboardType="numeric"
               />
               <ThemedText style={styles.priceRangeText}>to</ThemedText>
               <TextInput
-                style={styles.priceInput}
+                style={[styles.priceInput, { color: useThemeColor({}, 'text') }]}
                 placeholder="Max"
                 value={localFilters.priceRange.max.toString()}
-                onChangeText={(text) => setLocalFilters({
-                  ...localFilters,
-                  priceRange: { ...localFilters.priceRange, max: parseInt(text) || 1000000 }
-                })}
+                onChangeText={(text) => {
+                  const numValue = parseInt(text);
+                  const validValue = Number.isNaN(numValue) ? 1000000 : Math.max(0, numValue);
+                  setLocalFilters({
+                    ...localFilters,
+                    priceRange: { ...localFilters.priceRange, max: validValue }
+                  });
+                }}
                 keyboardType="numeric"
               />
             </View>
@@ -462,7 +470,7 @@ export const ShopCategoryViewScreen: React.FC<ShopCategoryViewProps> = ({ catego
               <View style={styles.searchBar}>
                 <IconSymbol name="magnifyingglass" size={20} color={iconColor} />
                 <TextInput
-                  style={styles.searchInput}
+                  style={[styles.searchInput, { color: useThemeColor({}, 'text') }]}
                   placeholder={`Search ${formatCategoryName(category)}...`}
                   placeholderTextColor={iconColor}
                   value={filters.searchQuery}

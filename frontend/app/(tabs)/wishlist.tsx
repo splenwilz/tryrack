@@ -75,7 +75,13 @@ const WishlistItemCard: React.FC<{ item: BoutiqueItem }> = ({ item }) => {
       )}
 
       {/* Remove from Wishlist Button */}
-      <TouchableOpacity style={styles.removeButton} onPress={handleRemove}>
+      <TouchableOpacity 
+        style={[
+          styles.removeButton, 
+          item.arAvailable && styles.removeButtonWithAR
+        ]} 
+        onPress={handleRemove}
+      >
         <IconSymbol name="plus" size={16} color="white" style={{ transform: [{ rotate: '45deg' }] }} />
       </TouchableOpacity>
 
@@ -305,6 +311,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  removeButtonWithAR: {
+    top: 50, // Move down when AR badge is present
   },
   itemDetails: {
     padding: 12,

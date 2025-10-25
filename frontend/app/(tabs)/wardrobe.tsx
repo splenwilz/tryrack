@@ -60,38 +60,20 @@ const mockWardrobeData: WardrobeItem[] = [
     category: 'bottom',
     imageUrl: 'https://images.unsplash.com/photo-1506629905607-3a4b4b4b4b4b?w=300&h=400&fit=crop',
     colors: ['navy'],
-    tags: ['casual', 'athletic']
+    tags: ['casual', 'comfortable']
   },
   {
     id: '6',
-    title: 'Black Trousers',
+    title: 'Black Dress Pants',
     category: 'bottom',
-    imageUrl: 'https://images.unsplash.com/photo-1591195853828-9db59c24745a?w=300&h=400&fit=crop',
+    imageUrl: 'https://images.unsplash.com/photo-1506629905607-3a4b4b4b4b4b?w=300&h=400&fit=crop',
     colors: ['black'],
     tags: ['formal', 'work']
   },
   
-  // OUTERWEAR
-  {
-    id: '7',
-    title: 'Blue Denim Jacket',
-    category: 'outerwear',
-    imageUrl: 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=300&h=400&fit=crop',
-    colors: ['blue'],
-    tags: ['casual', 'denim']
-  },
-  {
-    id: '8',
-    title: 'Black Leather Jacket',
-    category: 'outerwear',
-    imageUrl: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=300&h=400&fit=crop',
-    colors: ['black'],
-    tags: ['casual', 'leather']
-  },
-  
   // SHOES
   {
-    id: '9',
+    id: '7',
     title: 'White Sneakers',
     category: 'shoes',
     imageUrl: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=300&h=400&fit=crop',
@@ -99,25 +81,51 @@ const mockWardrobeData: WardrobeItem[] = [
     tags: ['casual', 'athletic']
   },
   {
-    id: '10',
+    id: '8',
     title: 'Black Dress Shoes',
     category: 'shoes',
     imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=300&h=400&fit=crop',
     colors: ['black'],
-    tags: ['formal', 'work']
+    tags: ['formal', 'leather']
   },
   {
-    id: '11',
+    id: '9',
     title: 'Brown Boots',
     category: 'shoes',
-    imageUrl: 'https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=300&h=400&fit=crop',
+    imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=300&h=400&fit=crop',
     colors: ['brown'],
     tags: ['casual', 'boots']
   },
   
-  // DRESSES
+  // OUTERWEAR
+  {
+    id: '10',
+    title: 'Blue Denim Jacket',
+    category: 'outerwear',
+    imageUrl: 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=300&h=400&fit=crop',
+    colors: ['blue'],
+    tags: ['casual', 'denim']
+  },
+  {
+    id: '11',
+    title: 'Black Blazer',
+    category: 'outerwear',
+    imageUrl: 'https://images.unsplash.com/photo-1594938298605-c04c1c4d8f69?w=300&h=400&fit=crop',
+    colors: ['black'],
+    tags: ['formal', 'work']
+  },
   {
     id: '12',
+    title: 'Gray Cardigan',
+    category: 'outerwear',
+    imageUrl: 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=300&h=400&fit=crop',
+    colors: ['gray'],
+    tags: ['casual', 'comfortable']
+  },
+  
+  // DRESSES
+  {
+    id: '13',
     title: 'Black Little Dress',
     category: 'dress',
     imageUrl: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=300&h=400&fit=crop',
@@ -125,51 +133,59 @@ const mockWardrobeData: WardrobeItem[] = [
     tags: ['formal', 'elegant']
   },
   {
-    id: '13',
+    id: '14',
     title: 'Floral Summer Dress',
     category: 'dress',
     imageUrl: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=300&h=400&fit=crop',
-    colors: ['multi'],
+    colors: ['floral'],
     tags: ['casual', 'summer']
+  },
+  {
+    id: '15',
+    title: 'Red Cocktail Dress',
+    category: 'dress',
+    imageUrl: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=300&h=400&fit=crop',
+    colors: ['red'],
+    tags: ['formal', 'party']
   },
   
   // ACCESSORIES
   {
-    id: '14',
-    title: 'Black Handbag',
+    id: '16',
+    title: 'Black Leather Handbag',
     category: 'accessories',
     imageUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=300&h=400&fit=crop',
     colors: ['black'],
-    tags: ['bag', 'casual']
+    tags: ['leather', 'elegant']
   },
-  {
-    id: '15',
-    title: 'Gold Watch',
-    category: 'accessories',
-    imageUrl: 'https://images.unsplash.com/photo-1523170335258-f5b88c7c4c38?w=300&h=400&fit=crop',
-    colors: ['gold'],
-    tags: ['watch', 'luxury']
-  },
-  {
-    id: '16',
-    title: 'Silver Necklace',
-    category: 'accessories',
-    imageUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&h=400&fit=crop',
-    colors: ['silver'],
-    tags: ['jewelry', 'elegant']
-  },
-  
-  // UNDERWEAR/LINGERIE
   {
     id: '17',
-    title: 'White Cotton Bra',
-    category: 'underwear',
-    imageUrl: 'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=300&h=400&fit=crop',
-    colors: ['white'],
-    tags: ['basic', 'comfortable']
+    title: 'Gold Statement Necklace',
+    category: 'accessories',
+    imageUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&h=400&fit=crop',
+    colors: ['gold'],
+    tags: ['jewelry', 'statement']
   },
   {
     id: '18',
+    title: 'Silk Scarf',
+    category: 'accessories',
+    imageUrl: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&h=400&fit=crop',
+    colors: ['multicolor'],
+    tags: ['silk', 'elegant']
+  },
+  
+  // UNDERWEAR
+  {
+    id: '19',
+    title: 'Cotton Bra Set',
+    category: 'underwear',
+    imageUrl: 'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=300&h=400&fit=crop',
+    colors: ['white'],
+    tags: ['cotton', 'comfortable']
+  },
+  {
+    id: '20',
     title: 'Black Lace Set',
     category: 'underwear',
     imageUrl: 'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=300&h=400&fit=crop',
@@ -178,8 +194,6 @@ const mockWardrobeData: WardrobeItem[] = [
   }
 ];
 
-// Empty wardrobe for new users - uncomment above to see populated wardrobe
-// const mockWardrobeData: WardrobeItem[] = [];
 
 // Wardrobe Item Card Component - displays personal wardrobe items
 const WardrobeItemCard: React.FC<{ item: WardrobeItem }> = ({ item }) => {
@@ -188,117 +202,131 @@ const WardrobeItemCard: React.FC<{ item: WardrobeItem }> = ({ item }) => {
   return (
     <TouchableOpacity style={[styles.itemCard, { backgroundColor }]}>
       <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
-      <ThemedText style={styles.itemTitle} numberOfLines={2}>
-        {item.title}
-      </ThemedText>
+      <View style={styles.itemDetails}>
+        <ThemedText style={styles.itemTitle} numberOfLines={2}>
+          {item.title}
+        </ThemedText>
+        <View style={styles.itemTags}>
+          {item.tags.slice(0, 2).map((tag) => (
+            <View key={tag} style={styles.tag}>
+              <ThemedText style={styles.tagText}>{tag}</ThemedText>
+            </View>
+          ))}
+        </View>
+      </View>
     </TouchableOpacity>
   );
 };
 
-// Wardrobe Carousel Component - horizontal scrollable section
+// Wardrobe Carousel Component - horizontal scrollable list of wardrobe items
 const WardrobeCarousel: React.FC<{ 
   title: string; 
   items: WardrobeItem[]; 
-  onViewAll?: () => void 
+  onViewAll?: () => void;
 }> = ({ title, items, onViewAll }) => {
+  const tintColor = useThemeColor({}, 'tint');
+  
   return (
-    <View style={styles.carouselSection}>
+    <View style={styles.carouselContainer}>
       <View style={styles.carouselHeader}>
-        <ThemedText type="subtitle" style={styles.carouselTitle}>
-          {title}
-        </ThemedText>
+        <ThemedText type="subtitle" style={styles.carouselTitle}>{title}</ThemedText>
         {onViewAll && (
           <TouchableOpacity onPress={onViewAll}>
-            <ThemedText style={styles.viewAllText}>View All</ThemedText>
+            <ThemedText style={[styles.viewAllText, { color: tintColor }]}>View All</ThemedText>
           </TouchableOpacity>
         )}
       </View>
-      <FlatList
-        data={items}
-        horizontal
+      <ScrollView 
+        horizontal 
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.carouselContent}
-        renderItem={({ item }) => <WardrobeItemCard item={item} />}
-        keyExtractor={(item) => item.id}
-      />
+      >
+        {items.map((item) => (
+          <WardrobeItemCard key={item.id} item={item} />
+        ))}
+      </ScrollView>
     </View>
   );
 };
 
-// Featured Wardrobe Item Section - large display for highlighted item
+// Featured Wardrobe Item Component - larger display for featured items
 const FeaturedWardrobeItem: React.FC<{ item: WardrobeItem }> = ({ item }) => {
-  return (
-    <View style={styles.featuredSection}>
-      <Image source={{ uri: item.imageUrl }} style={styles.featuredImage} />
-      <View style={styles.featuredContent}>
-        <ThemedText type="subtitle" style={styles.featuredTitle}>
-          {item.title}
-        </ThemedText>
-        <TouchableOpacity style={styles.featuredButton}>
-          <ThemedText style={styles.featuredButtonText}>
-            Try This Look
-          </ThemedText>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-
-// Empty Wardrobe State Component - shown when user has no items
-const EmptyWardrobeState: React.FC<{ onAddItem: () => void }> = ({ onAddItem }) => {
   const backgroundColor = useThemeColor({}, 'background');
-  const iconColor = useThemeColor({}, 'icon');
+  const tintColor = useThemeColor({}, 'tint');
   
   return (
-    <View style={[styles.emptyStateContainer, { backgroundColor }]}>
-      <View style={styles.emptyStateContent}>
-        {/* Empty State Icon */}
-        <View style={[styles.emptyStateIcon, { backgroundColor: iconColor + '20' }]}>
-          <ThemedText style={[styles.emptyStateIconText, { color: iconColor }]}>
-            👕
-          </ThemedText>
-        </View>
-        
-        {/* Empty State Title */}
-        <ThemedText type="title" style={styles.emptyStateTitle}>
-          Your Wardrobe Awaits
+    <TouchableOpacity style={[styles.featuredCard, { backgroundColor }]}>
+      <Image source={{ uri: item.imageUrl }} style={styles.featuredImage} />
+      <View style={styles.featuredContent}>
+        <ThemedText type="subtitle" style={styles.featuredTitle}>{item.title}</ThemedText>
+        <ThemedText style={styles.featuredDescription}>
+          Perfect for your next outfit
         </ThemedText>
-        
-        {/* Empty State Description */}
-        <ThemedText style={styles.emptyStateDescription}>
-          Start building your digital wardrobe by adding your favorite pieces. 
-          Take photos of your clothes and let AI help you create amazing outfits!
-        </ThemedText>
-        
-        {/* Add Item Button */}
-        <TouchableOpacity style={styles.addItemButton} onPress={onAddItem}>
-          <ThemedText style={styles.addItemButtonText}>
-            + Add Your First Item
-          </ThemedText>
-        </TouchableOpacity>
-        
-        {/* Quick Tips */}
-        <View style={styles.tipsContainer}>
-          <ThemedText style={styles.tipsTitle}>💡 Quick Tips:</ThemedText>
-          <ThemedText style={styles.tipText}>• Take photos against plain backgrounds</ThemedText>
-          <ThemedText style={styles.tipText}>• Include full items in frame</ThemedText>
-          <ThemedText style={styles.tipText}>• Good lighting works best</ThemedText>
+        <View style={styles.featuredTags}>
+          {item.tags.map((tag) => (
+            <View key={tag} style={[styles.featuredTag, { backgroundColor: tintColor }]}>
+              <ThemedText style={styles.featuredTagText}>{tag}</ThemedText>
+            </View>
+          ))}
         </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// Empty Wardrobe State Component - shown when wardrobe is empty
+const EmptyWardrobeState: React.FC = () => {
+  const backgroundColor = useThemeColor({}, 'background');
+  const tintColor = useThemeColor({}, 'tint');
+  
+  const handleAddFirstItem = () => {
+    console.log('Add first item pressed');
+    // TODO: Navigate to add item screen or camera
+  };
+  
+  return (
+    <View style={[styles.emptyState, { backgroundColor }]}>
+      <View style={styles.emptyStateIcon}>
+        <ThemedText style={styles.emptyStateEmoji}>👕</ThemedText>
+      </View>
+      <ThemedText type="title" style={styles.emptyStateTitle}>
+        Your Wardrobe is Empty
+      </ThemedText>
+      <ThemedText style={styles.emptyStateDescription}>
+        Start building your digital wardrobe by adding your favorite clothing items.
+      </ThemedText>
+      <TouchableOpacity 
+        style={[styles.addButton, { backgroundColor: tintColor }]}
+        onPress={handleAddFirstItem}
+      >
+        <ThemedText style={styles.addButtonText}>Add Your First Item</ThemedText>
+      </TouchableOpacity>
+      
+      <View style={styles.quickTips}>
+        <ThemedText style={styles.quickTipsTitle}>Quick Tips:</ThemedText>
+        <ThemedText style={styles.quickTip}>• Take photos of your clothes</ThemedText>
+        <ThemedText style={styles.quickTip}>• Organize by categories</ThemedText>
+        <ThemedText style={styles.quickTip}>• Get outfit recommendations</ThemedText>
       </View>
     </View>
   );
 };
 
+/**
+ * Wardrobe Screen Component
+ * Displays user's personal wardrobe with categorized items and empty state
+ * Based on blueprint requirements for wardrobe management
+ */
 export default function WardrobeScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   
-  // Filter items by category for different sections
-  const topsItems = mockWardrobeData.filter(item => item.category === 'top');
-  const bottomsItems = mockWardrobeData.filter(item => item.category === 'bottom');
+  // Filter items by category
+  const topItems = mockWardrobeData.filter(item => item.category === 'top');
+  const bottomItems = mockWardrobeData.filter(item => item.category === 'bottom');
+  const shoeItems = mockWardrobeData.filter(item => item.category === 'shoes');
   const outerwearItems = mockWardrobeData.filter(item => item.category === 'outerwear');
-  const shoesItems = mockWardrobeData.filter(item => item.category === 'shoes');
-  const dressesItems = mockWardrobeData.filter(item => item.category === 'dress');
-  const accessoriesItems = mockWardrobeData.filter(item => item.category === 'accessories');
+  const dressItems = mockWardrobeData.filter(item => item.category === 'dress');
+  const accessoryItems = mockWardrobeData.filter(item => item.category === 'accessories');
   const underwearItems = mockWardrobeData.filter(item => item.category === 'underwear');
   
   // Featured item (first outerwear item)
@@ -307,10 +335,9 @@ export default function WardrobeScreen() {
   // Mock notification count - in real app this would come from state/API
   const notificationCount = 3;
 
-  // Handler functions for header actions
   const handleSearchPress = () => {
     console.log('Search pressed - implement search functionality');
-    // TODO: Navigate to search screen or show search modal
+    // TODO: Navigate to search screen
   };
 
   const handleNotificationPress = () => {
@@ -318,102 +345,112 @@ export default function WardrobeScreen() {
     // TODO: Navigate to notifications screen
   };
 
-  // Handler for adding new items
-  const handleAddItem = () => {
-    console.log('Add item pressed - implement add item functionality');
-    // TODO: Navigate to camera or photo picker
-  };
-
-  // Handler for navigating to category view
   const handleViewAll = (category: string) => {
+    console.log(`View all ${category} pressed`);
     router.push(`/category?category=${category}`);
   };
 
-  // Check if wardrobe is empty
-  const isWardrobeEmpty = mockWardrobeData.length === 0;
+  // Show empty state if no items
+  if (mockWardrobeData.length === 0) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+        <CustomHeader
+          title="My Wardrobe"
+          onSearchPress={handleSearchPress}
+          onNotificationPress={handleNotificationPress}
+          notificationCount={notificationCount}
+        />
+        <EmptyWardrobeState />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
-      {/* Custom Header */}
       <CustomHeader
-        title="Wardrobe"
+        title="My Wardrobe"
         onSearchPress={handleSearchPress}
         onNotificationPress={handleNotificationPress}
         notificationCount={notificationCount}
       />
+      
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Featured Item */}
+        {featuredItem && (
+          <View style={styles.featuredSection}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>Featured</ThemedText>
+            <FeaturedWardrobeItem item={featuredItem} />
+          </View>
+        )}
 
-      <ScrollView style={styles.scrollContainer}>
-        {isWardrobeEmpty ? (
-          /* Empty Wardrobe State */
-          <EmptyWardrobeState onAddItem={handleAddItem} />
-        ) : (
-          /* Populated Wardrobe */
-          <>
-            {/* Featured Wardrobe Item Section */}
-            {featuredItem && (
-              <FeaturedWardrobeItem item={featuredItem} />
-            )}
+        {/* Recently Added */}
+        <WardrobeCarousel
+          title="Recently Added"
+          items={mockWardrobeData.slice(0, 4)}
+          onViewAll={() => handleViewAll('recent')}
+        />
 
-            {/* Tops Section */}
-            <WardrobeCarousel 
-              title="Tops" 
-              items={topsItems}
-              onViewAll={() => handleViewAll('top')}
-            />
+        {/* Tops */}
+        {topItems.length > 0 && (
+          <WardrobeCarousel
+            title="Tops"
+            items={topItems}
+            onViewAll={() => handleViewAll('top')}
+          />
+        )}
 
-            {/* Bottoms Section */}
-            <WardrobeCarousel 
-              title="Bottoms" 
-              items={bottomsItems}
-              onViewAll={() => handleViewAll('bottom')}
-            />
+        {/* Bottoms */}
+        {bottomItems.length > 0 && (
+          <WardrobeCarousel
+            title="Bottoms"
+            items={bottomItems}
+            onViewAll={() => handleViewAll('bottom')}
+          />
+        )}
 
-            {/* Dresses Section */}
-            {dressesItems.length > 0 && (
-              <WardrobeCarousel 
-                title="Dresses" 
-                items={dressesItems}
-                onViewAll={() => handleViewAll('dress')}
-              />
-            )}
+        {/* Shoes */}
+        {shoeItems.length > 0 && (
+          <WardrobeCarousel
+            title="Shoes"
+            items={shoeItems}
+            onViewAll={() => handleViewAll('shoes')}
+          />
+        )}
 
-            {/* Outerwear Section */}
-            <WardrobeCarousel 
-              title="Outerwear" 
-              items={outerwearItems}
-              onViewAll={() => handleViewAll('outerwear')}
-            />
+        {/* Outerwear */}
+        {outerwearItems.length > 0 && (
+          <WardrobeCarousel
+            title="Outerwear"
+            items={outerwearItems}
+            onViewAll={() => handleViewAll('outerwear')}
+          />
+        )}
 
-            {/* Shoes Section */}
-            <WardrobeCarousel 
-              title="Shoes" 
-              items={shoesItems}
-              onViewAll={() => handleViewAll('shoes')}
-            />
+        {/* Dresses */}
+        {dressItems.length > 0 && (
+          <WardrobeCarousel
+            title="Dresses"
+            items={dressItems}
+            onViewAll={() => handleViewAll('dress')}
+          />
+        )}
 
-            {/* Accessories Section */}
-            <WardrobeCarousel 
-              title="Accessories" 
-              items={accessoriesItems}
-              onViewAll={() => handleViewAll('accessories')}
-            />
+        {/* Accessories */}
+        {accessoryItems.length > 0 && (
+          <WardrobeCarousel
+            title="Accessories"
+            items={accessoryItems}
+            onViewAll={() => handleViewAll('accessories')}
+          />
+        )}
 
-            {/* Underwear Section */}
-            {underwearItems.length > 0 && (
-              <WardrobeCarousel 
-                title="Underwear" 
-                items={underwearItems}
-                onViewAll={() => handleViewAll('underwear')}
-              />
-            )}
-
-            {/* Recently Added Section */}
-            <WardrobeCarousel 
-              title="Recently Added" 
-              items={mockWardrobeData.slice(0, 4)}
-              onViewAll={() => handleViewAll('recent')}
-            />
-          </>
+        {/* Underwear */}
+        {underwearItems.length > 0 && (
+          <WardrobeCarousel
+            title="Underwear"
+            items={underwearItems}
+            onViewAll={() => handleViewAll('underwear')}
+          />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -424,153 +461,182 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContainer: {
+  content: {
     flex: 1,
+    paddingHorizontal: 20,
   },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  // Featured Item Styles
   featuredSection: {
-    marginHorizontal: 20,
+    marginBottom: 32,
     marginTop: 20,
-    marginBottom: 30,
-    borderRadius: 12,
+  },
+  featuredCard: {
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   featuredImage: {
     width: '100%',
-    height: 300,
-    resizeMode: 'cover',
+    height: 200,
   },
   featuredContent: {
-    padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    padding: 16,
   },
   featuredTitle: {
-    color: 'white',
-    marginBottom: 15,
-  },
-  featuredButton: {
-    backgroundColor: 'white',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  featuredButtonText: {
-    color: 'black',
+    fontSize: 18,
     fontWeight: '600',
+    marginBottom: 8,
   },
-  carouselSection: {
-    marginBottom: 30,
+  featuredDescription: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginBottom: 12,
+  },
+  featuredTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  featuredTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  featuredTagText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  // Carousel Styles
+  carouselContainer: {
+    marginBottom: 32,
   },
   carouselHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 15,
+    marginBottom: 16,
   },
   carouselTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
   },
   viewAllText: {
-    color: '#0a7ea4',
-    fontSize: 16,
-  },
-  carouselContent: {
-    paddingHorizontal: 20,
-  },
-  itemCard: {
-    width: 150,
-    marginRight: 15,
-    borderRadius: 8,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  itemImage: {
-    width: '100%',
-    height: 200,
-    resizeMode: 'cover',
-  },
-  itemTitle: {
-    padding: 12,
     fontSize: 14,
     fontWeight: '500',
   },
+  carouselContent: {
+    paddingRight: 20,
+  },
+  // Item Card Styles
+  itemCard: {
+    width: 140,
+    marginRight: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  itemImage: {
+    width: '100%',
+    height: 140,
+  },
+  itemDetails: {
+    padding: 12,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  itemTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  tag: {
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginRight: 4,
+    marginBottom: 4,
+  },
+  tagText: {
+    fontSize: 10,
+    opacity: 0.8,
+  },
   // Empty State Styles
-  emptyStateContainer: {
+  emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    paddingVertical: 60,
-  },
-  emptyStateContent: {
-    alignItems: 'center',
-    maxWidth: 300,
   },
   emptyStateIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(0,0,0,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
   },
-  emptyStateIconText: {
-    fontSize: 32,
+  emptyStateEmoji: {
+    fontSize: 48,
   },
   emptyStateTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   emptyStateDescription: {
     fontSize: 16,
-    lineHeight: 24,
     textAlign: 'center',
-    marginBottom: 32,
     opacity: 0.7,
+    lineHeight: 24,
+    marginBottom: 32,
   },
-  addItemButton: {
-    backgroundColor: '#0a7ea4',
+  addButton: {
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
-    marginBottom: 32,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 32,
   },
-  addItemButtonText: {
+  addButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
-  tipsContainer: {
-    alignSelf: 'stretch',
+  quickTips: {
+    alignItems: 'flex-start',
   },
-  tipsTitle: {
+  quickTipsTitle: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
   },
-  tipText: {
+  quickTip: {
     fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 6,
-    opacity: 0.8,
+    opacity: 0.7,
+    marginBottom: 4,
   },
 });

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Boutique item interface (same as in other files)
@@ -38,18 +39,9 @@ const WISHLIST_STORAGE_KEY = '@wishlist_items';
  */
 export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [wishlistItems, setWishlistItems] = useState<BoutiqueItem[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load wishlist from storage on mount
-  useEffect(() => {
-    loadWishlist();
-  }, []);
-
-  // Save wishlist to storage whenever it changes
-  useEffect(() => {
-    saveWishlist();
-  }, [wishlistItems]);
-
-  const loadWishlist = async () => {
+  const loadWishlist = useCallback(async () => {
     try {
       const storedItems = await AsyncStorage.getItem(WISHLIST_STORAGE_KEY);
       if (storedItems) {
@@ -58,15 +50,26 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch (error) {
       console.error('Error loading wishlist:', error);
     }
-  };
+  }, []);
 
-  const saveWishlist = async () => {
+  const saveWishlist = useCallback(async () => {
     try {
       await AsyncStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlistItems));
     } catch (error) {
       console.error('Error saving wishlist:', error);
     }
-  };
+  }, [wishlistItems]);
+
+  // Load wishlist from storage on mount
+  useEffect(() => {
+    loadWishlist().then(() => setIsInitialized(true));
+  }, [loadWishlist]);
+
+  // Save wishlist to storage whenever it changes (but only after initialization)
+  useEffect(() => {
+    if (!isInitialized) return;
+    saveWishlist();
+  }, [isInitialized, saveWishlist]);
 
   const addToWishlist = (item: BoutiqueItem) => {
     if (!isInWishlist(item.id)) {

@@ -1,4 +1,3 @@
-import type React from 'react';
 import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
@@ -255,7 +254,7 @@ export default function VirtualTryOnScreen() {
         {/* Product Information */}
         <View style={styles.productSection}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>Product</ThemedText>
-          <View style={styles.productCard}>
+          <View style={[styles.productCard, { backgroundColor }]}>
             <Image source={{ uri: selectedItem.imageUrl }} style={styles.productImage} />
             <View style={styles.productInfo}>
               <ThemedText style={styles.brandName}>{selectedItem.brand}</ThemedText>
@@ -268,7 +267,7 @@ export default function VirtualTryOnScreen() {
         {/* User Photo Section */}
         <View style={styles.photoSection}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>Your Photo</ThemedText>
-          <TouchableOpacity style={styles.photoButton} onPress={handleSelectPhoto}>
+          <TouchableOpacity style={[styles.photoButton, { backgroundColor }]} onPress={handleSelectPhoto}>
             {userPhoto ? (
               <View style={styles.photoContainer}>
                 <Image source={{ uri: userPhoto }} style={styles.userPhoto} />
@@ -322,7 +321,7 @@ export default function VirtualTryOnScreen() {
         {generatedImage && (
           <View style={styles.resultSection}>
             <ThemedText type="subtitle" style={styles.sectionTitle}>Virtual Try-On Result</ThemedText>
-            <View style={styles.resultCard}>
+            <View style={[styles.resultCard, { backgroundColor }]}>
               <Image source={{ uri: generatedImage }} style={styles.resultImage} />
               <View style={styles.resultActions}>
                 <TouchableOpacity style={styles.actionButton} onPress={handleSaveResult}>
@@ -398,7 +397,6 @@ const styles = StyleSheet.create({
   },
   productCard: {
     flexDirection: 'row',
-    backgroundColor: 'white',
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
@@ -436,7 +434,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   photoButton: {
-    backgroundColor: 'white',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -521,7 +518,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   resultCard: {
-    backgroundColor: 'white',
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',

@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   rightSection: {
