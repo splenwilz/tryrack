@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { decode as base64Decode } from 'base-64';
 
 /**
  * Secure Storage Utility
@@ -15,6 +16,30 @@ import { Platform } from 'react-native';
  * @see https://docs.expo.dev/versions/latest/sdk/securestore/ - Official Expo SecureStore documentation
  * @see https://github.com/expo/expo/blob/main/docs/pages/guides/authentication.mdx - Authentication best practices
  */
+
+/**
+ * Decodes base64url encoded JWT payload
+ * Handles React Native compatibility and proper base64url decoding
+ * 
+ * @param b64url - Base64url encoded string
+ * @returns Decoded JSON string
+ */
+function base64UrlToJson(b64url: string): string {
+  // Convert base64url to base64
+  let b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  
+  // Add padding if necessary
+  while (b64.length % 4) {
+    b64 += '=';
+  }
+  
+  // Use platform-appropriate decoder
+  if (Platform.OS === 'web') {
+    return atob(b64);
+  } else {
+    return base64Decode(b64);
+  }
+}
 
 // Storage keys for different types of data
 const STORAGE_KEYS = {
@@ -244,7 +269,7 @@ export async function validateStoredToken(): Promise<boolean> {
     
     // Decode JWT payload to check expiration
     try {
-      const payload = JSON.parse(atob(parts[1]));
+      const payload = JSON.parse(base64UrlToJson(parts[1]));
       console.log('🔍 SecureStorage Debug - Token payload decoded');
       
       // Check if token has expiration claim
