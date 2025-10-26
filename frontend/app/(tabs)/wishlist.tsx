@@ -7,6 +7,7 @@ import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { router } from 'expo-router';
+import { withAlpha } from '@/constants/theme';
 
 // Boutique item interface (same as in other files)
 interface BoutiqueItem {
@@ -133,7 +134,7 @@ const EmptyWishlist: React.FC = () => {
   return (
     <View style={[styles.emptyContainer, { backgroundColor }]}>
       <View style={styles.emptyContent}>
-        <View style={[styles.emptyIcon, { backgroundColor: tintColor + '20' }]}>
+        <View style={[styles.emptyIcon, { backgroundColor: withAlpha(tintColor, 0.125) }]}>
           <ThemedText style={styles.emptyIconText}>💝</ThemedText>
         </View>
         <ThemedText type="title" style={styles.emptyTitle}>

@@ -8,6 +8,37 @@ import { Platform } from 'react-native';
 const tintColorLight = '#0a7ea4';
 const tintColorDark = '#fff';
 
+/**
+ * Helper function to add alpha channel to hex colors
+ * Handles both short-form (#fff) and long-form (#ffffff) hex colors
+ * 
+ * @param hex - The hex color string (e.g., '#fff' or '#ffffff')
+ * @param alpha - Alpha value between 0 and 1
+ * @returns Hex color with alpha channel appended
+ * 
+ * @example
+ * withAlpha('#fff', 0.2) // Returns '#fff33' (20% opacity)
+ * withAlpha('#ffffff', 0.5) // Returns '#ffffff80' (50% opacity)
+ */
+export const withAlpha = (hex: string, alpha: number) => {
+  // Validate hex format and ensure it's properly formatted
+  const hexRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+  if (!hexRegex.test(hex)) {
+    console.warn(`Invalid hex color: ${hex}, returning original value`);
+    return hex;
+  }
+  
+  // Convert short-form hex (#fff) to long-form (#ffffff)
+  const normalizedHex = hex.length === 4
+    ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+    : hex;
+  
+  // Convert alpha (0-1) to hex (00-ff)
+  const alphaHex = Math.round(alpha * 255).toString(16).padStart(2, '0');
+  
+  return `${normalizedHex}${alphaHex}`;
+};
+
 export const Colors = {
   light: {
     text: '#11181C',

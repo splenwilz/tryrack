@@ -6,6 +6,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router, useLocalSearchParams } from 'expo-router';
+import { withAlpha } from '@/constants/theme';
 
 // Product interface
 interface Product {
@@ -100,7 +101,7 @@ export default function BoutiqueTryOnScreen() {
                 { text: 'Cancel', style: 'cancel' },
                 {
                   text: 'Save',
-                  onPress: (name) => {
+                  onPress: (name?: string) => {
                     if (name) {
                       const newCustomer = {
                         id: Date.now().toString(),
@@ -131,7 +132,7 @@ export default function BoutiqueTryOnScreen() {
                 { text: 'Cancel', style: 'cancel' },
                 {
                   text: 'Save',
-                  onPress: (name) => {
+                  onPress: (name?: string) => {
                     if (name) {
                       const newCustomer = {
                         id: Date.now().toString(),
@@ -278,7 +279,7 @@ export default function BoutiqueTryOnScreen() {
           <View style={styles.customerList}>
             {/* Add Customer Button */}
             <TouchableOpacity
-              style={[styles.addCustomerButton, { backgroundColor: tintColor + '20', borderColor: tintColor }]}
+              style={[styles.addCustomerButton, { backgroundColor: withAlpha(tintColor, 0.125), borderColor: tintColor }]}
               onPress={handleAddCustomerPhoto}
             >
               <IconSymbol name="plus.circle.fill" size={24} color={tintColor} />
@@ -296,7 +297,7 @@ export default function BoutiqueTryOnScreen() {
                   style={[
                     styles.customerItem,
                     { 
-                      backgroundColor: selectedCustomer === customer.id ? tintColor + '10' : backgroundColor,
+                      backgroundColor: selectedCustomer === customer.id ? withAlpha(tintColor, 0.0625) : backgroundColor,
                       borderColor: selectedCustomer === customer.id ? tintColor : 'transparent',
                     }
                   ]}
@@ -322,7 +323,7 @@ export default function BoutiqueTryOnScreen() {
                 filteredCustomers.length === 0 && searchQuery ? (
                   <View style={styles.emptyState}>
                     <ThemedText style={[styles.emptyStateText, { color: iconColor }]}>
-                      No customers found matching "{searchQuery}"
+                      No customers found matching `${searchQuery}`
                     </ThemedText>
                   </View>
                 ) : null

@@ -84,7 +84,7 @@ const FilterModal: React.FC<{
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={[styles.modalContainer, { backgroundColor }]}>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}>
@@ -305,7 +305,7 @@ export const ShopCategoryViewScreen: React.FC<ShopCategoryViewProps> = ({ catego
         case 'newest':
           return b.id.localeCompare(a.id); // Simple newest by ID
         case 'popular':
-          return Math.random() - 0.5; // Random for demo
+          return a.title.localeCompare(b.title); // Stable placeholder: alphabetic by title to avoid flicker
         default:
           return 0;
       }

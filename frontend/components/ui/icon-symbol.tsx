@@ -55,6 +55,8 @@ const MAPPING = {
   'clock': 'access-time',
   'checkmark.circle': 'check-circle',
   'paperplane': 'send',
+  'eye.fill': 'visibility',
+  'trash.fill': 'delete',
 } as IconMapping;
 
 /**

@@ -5,6 +5,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router, useLocalSearchParams } from 'expo-router';
+import { withAlpha } from '@/constants/theme';
 
 // Order interface matching orders screen
 interface Order {
@@ -197,11 +198,12 @@ export default function OrderDetailScreen() {
           </View>
 
           <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: tintColor + '20' }]}
+            style={[styles.actionButton, { backgroundColor: withAlpha(tintColor, 0.125) }]}
             onPress={handleContactCustomer}
           >
             <IconSymbol name="envelope.fill" size={18} color={tintColor} />
-            <ThemedText style={[styles.actionButtonText, { color: tintColor }]}>
+            <ThemedText 
+            style={[styles.actionButtonText, { color: tintColor }]}>
               Contact Customer
             </ThemedText>
           </TouchableOpacity>
