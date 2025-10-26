@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserType } from '@/contexts/UserTypeContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -49,7 +50,7 @@ interface StyleInsight {
   description: string;
   value: string;
   trend: 'up' | 'down' | 'stable';
-  icon: string;
+  icon: 'arrow.up' | 'paintpalette' | 'leaf';
 }
 
 interface OutfitHistory {
@@ -65,7 +66,7 @@ interface Achievement {
   id: string;
   title: string;
   description: string;
-  icon: string;
+  icon: 'star.fill' | 'leaf.fill' | 'crown.fill' | 'camera.fill';
   unlocked: boolean;
   progress?: number;
   maxProgress?: number;
@@ -233,7 +234,7 @@ const StyleInsightsSection: FC<{ colors: ColorScheme }> = ({ colors }) => (
         <View key={insight.id} style={[styles.insightCard, { backgroundColor: colors.background }]}>
           <View style={styles.insightHeader}>
             <IconSymbol 
-              name={insight.icon as 'arrow.up' | 'paintpalette' | 'leaf'} 
+              name={insight.icon}
               size={20} 
               color={insight.trend === 'up' ? '#4CAF50' : insight.trend === 'down' ? '#FF5722' : colors.tint} 
             />
@@ -380,7 +381,7 @@ const AchievementsSection: FC<{ colors: ColorScheme }> = ({ colors }) => (
             { backgroundColor: achievement.unlocked ? colors.tint : colors.tabIconDefault }
           ]}>
             <IconSymbol 
-              name={achievement.icon as 'star.fill' | 'leaf.fill' | 'crown.fill' | 'camera.fill'} 
+              name={achievement.icon}
               size={24} 
               color="white" 
             />
@@ -422,11 +423,33 @@ const PreferencesSection: FC<{
   colors: ColorScheme; 
   toggleBackgroundPreference: () => void;
   toggleNotifications: () => void;
-}> = ({ preferences, colors, toggleBackgroundPreference, toggleNotifications }) => (
+  accountMode: 'individual' | 'boutique';
+  onToggleAccountMode: () => void;
+}> = ({ preferences, colors, toggleBackgroundPreference, toggleNotifications, accountMode, onToggleAccountMode }) => (
   <View style={[styles.section, { backgroundColor: colors.background }]}>
     <Text style={[styles.sectionTitle, { color: colors.text }]}>
       Preferences
     </Text>
+
+    {/* Account Mode Toggle */}
+    <View style={styles.preferenceItem}>
+      <View style={styles.preferenceInfo}>
+        <Text style={[styles.preferenceTitle, { color: colors.text }]}>
+          Account Mode
+        </Text>
+        <Text style={[styles.preferenceDescription, { color: colors.tabIconDefault }]}>
+          Switch between Individual and Boutique modes
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.toggleButton, { backgroundColor: colors.tint }]}
+        onPress={onToggleAccountMode}
+      >
+        <Text style={styles.toggleButtonText}>
+          {accountMode === 'individual' ? 'Individual' : 'Boutique'}
+        </Text>
+      </TouchableOpacity>
+    </View>
 
     {/* Background Preference */}
     <View style={styles.preferenceItem}>
@@ -544,6 +567,7 @@ const SettingsSection: FC<{ colors: ColorScheme; handleLogout: () => void }> = (
  */
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
+  const { userType, setUserType } = useUserType();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   
@@ -606,6 +630,75 @@ export default function ProfileScreen() {
     }));
   };
 
+  /**
+   * Handle account mode switch
+   * Allows users to switch between Individual and Boutique modes
+   */
+  const handleToggleAccountMode = () => {
+    console.log('handleToggleAccountMode called, current userType:', userType);
+    
+    // If no user type is set, show alert to complete onboarding first
+    if (!userType) {
+      console.log('No user type, showing onboarding alert');
+      setTimeout(() => {
+        Alert.alert(
+          'Complete Onboarding First',
+          'Please complete the onboarding process to select your account mode. You\'ll be redirected to the onboarding screen.',
+          [
+          { 
+            text: 'Cancel', 
+            style: 'cancel'
+          },
+          { 
+            text: 'Go to Onboarding', 
+            onPress: () => {
+              router.replace('/onboarding');
+            }
+          }
+        ]
+      );
+      }, 100);
+      return;
+    }
+    
+    const newMode = userType === 'individual' ? 'boutique' : 'individual';
+    console.log('Switching to mode:', newMode);
+    
+    // Use setTimeout to ensure Alert is shown after current execution context
+    setTimeout(() => {
+      Alert.alert(
+        'Switch Account Mode',
+        `Switch to ${newMode === 'individual' ? 'Individual' : 'Boutique'} mode? You can always switch back.`,
+        [
+          { 
+            text: 'Cancel', 
+            style: 'cancel',
+            onPress: () => console.log('Cancelled mode switch')
+          },
+          { 
+            text: 'Switch', 
+            onPress: async () => {
+              console.log('Switching to mode:', newMode);
+              try {
+                await setUserType(newMode);
+                console.log('User type set, navigating...');
+                // Navigate to appropriate tabs based on new mode
+                if (newMode === 'individual') {
+                  router.replace('/(tabs)');
+                } else {
+                  router.replace('/(boutique-tabs)/dashboard');
+                }
+              } catch (error) {
+                console.error('Error switching mode:', error);
+                Alert.alert('Error', 'Failed to switch mode. Please try again.');
+              }
+            }
+          }
+        ]
+      );
+    }, 100);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -619,6 +712,8 @@ export default function ProfileScreen() {
           colors={colors} 
           toggleBackgroundPreference={toggleBackgroundPreference}
           toggleNotifications={toggleNotifications}
+          accountMode={userType || 'individual'}
+          onToggleAccountMode={handleToggleAccountMode}
         />
         <SettingsSection colors={colors} handleLogout={handleLogout} />
       </ScrollView>

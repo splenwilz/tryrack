@@ -5,7 +5,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type React from 'react';
 import { useWishlist } from '@/contexts/WishlistContext';
 interface BoutiqueItem {
@@ -50,6 +50,13 @@ const FilterModal: React.FC<{
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const [localFilters, setLocalFilters] = useState<FilterState>(filters);
+
+  // Sync local filters when modal becomes visible or filters prop changes
+  useEffect(() => {
+    if (visible) {
+      setLocalFilters(filters);
+    }
+  }, [visible, filters]);
 
   const handleApply = () => {
     // Normalize price range to ensure min ≤ max and non-negative values

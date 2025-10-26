@@ -205,6 +205,7 @@ const CategoryFilter: React.FC<{
  */
 export default function StyleInsightsScreen() {
   const backgroundColor = useThemeColor({}, 'background');
+  const tintColor = useThemeColor({}, 'tint');
   const [selectedCategory, setSelectedCategory] = React.useState('all');
   
   const filteredInsights = selectedCategory === 'all' 
@@ -253,10 +254,10 @@ export default function StyleInsightsScreen() {
             Style Summary
           </ThemedText>
           <ThemedText style={styles.summaryText}>
-            You're making great progress in your style journey! Keep experimenting with new combinations and don't be afraid to step out of your comfort zone.
+            You&apos;re making great progress in your style journey! Keep experimenting with new combinations and don&apos;t be afraid to step out of your comfort zone.
           </ThemedText>
           <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: useThemeColor({}, 'tint') }]}
+            style={[styles.actionButton, { backgroundColor: tintColor }]}
             onPress={() => router.push('/(tabs)/wardrobe')}
           >
             <IconSymbol name="plus" size={16} color="white" />

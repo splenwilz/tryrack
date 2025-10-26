@@ -164,7 +164,7 @@ const BoutiqueItemCard: React.FC<{ item: BoutiqueItem }> = ({ item }) => {
           <IconSymbol name="plus" size={16} color="white" />
           <ThemedText style={styles.tryOnButtonText}>
             Try Virtually
-          </ThemedText>
+        </ThemedText>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
