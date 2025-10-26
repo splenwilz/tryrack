@@ -25,6 +25,7 @@ interface User {
   last_name?: string;
   profile_picture_url?: string;
   is_active: boolean; // Added from backend
+  profile_completed?: boolean; // Profile completion status
 }
 
 interface AuthState {

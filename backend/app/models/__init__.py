@@ -1,6 +1,13 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, Enum as SQLEnum
 from sqlalchemy.sql import func
 from app.db import Base
+import enum
+
+
+class UserType(enum.Enum):
+    """User type enumeration."""
+    INDIVIDUAL = "individual"
+    BOUTIQUE = "boutique"
 
 
 class User(Base):
@@ -29,3 +36,17 @@ class User(Base):
     is_superuser = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # User type for switching between individual and boutique modes
+    user_type = Column(SQLEnum(UserType), nullable=True, default=UserType.INDIVIDUAL)
+    
+    # Profile completion fields
+    profile_completed = Column(Boolean, default=False, nullable=False)
+    gender = Column(String(10), nullable=True)  # 'male' or 'female'
+    height = Column(Float, nullable=True)  # in cm
+    weight = Column(Float, nullable=True)  # in kg
+    shoe_size = Column(String(10), nullable=True)
+    top_size = Column(String(10), nullable=True)
+    dress_size = Column(String(10), nullable=True)
+    pants_size = Column(String(10), nullable=True)
+    full_body_image_url = Column(String(500), nullable=True)  # For virtual try-on

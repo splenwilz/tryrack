@@ -21,7 +21,7 @@ export default function Index() {
 
   const isLoading = authLoading || userTypeLoading;
 
-  // Handle navigation based on authentication, onboarding, and user type
+  // Handle navigation based on authentication, onboarding, profile completion, and user type
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) {
@@ -30,6 +30,9 @@ export default function Index() {
       } else if (!isOnboardingComplete) {
         // User authenticated but onboarding not completed, go to onboarding
         router.replace('/onboarding');
+      // Profile completion is now optional - users can access it from settings
+      // } else if (user && !user.profile_completed) {
+      //   router.replace('/profile-completion');
       } else if (userType === 'individual') {
         // Individual user, go to individual tabs
         router.replace('/(tabs)');

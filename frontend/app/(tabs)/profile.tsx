@@ -513,19 +513,32 @@ const PreferencesSection: FC<{
  * Settings Section
  * App settings, privacy, and account management
  */
-const SettingsSection: FC<{ colors: ColorScheme; handleLogout: () => void }> = ({ colors, handleLogout }) => (
-  <View style={[styles.section, { backgroundColor: colors.background }]}>
-    <Text style={[styles.sectionTitle, { color: colors.text }]}>
-      Settings
-    </Text>
+const SettingsSection: FC<{ colors: ColorScheme; handleLogout: () => void }> = ({ colors, handleLogout }) => {
+  const handleCompleteProfile = () => {
+    router.push('/profile-completion');
+  };
 
-    <TouchableOpacity style={styles.settingItem}>
-      <IconSymbol name="lock" size={20} color={colors.tint} />
-      <Text style={[styles.settingText, { color: colors.text }]}>
-        Privacy & Security
+  return (
+    <View style={[styles.section, { backgroundColor: colors.background }]}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        Settings
       </Text>
-      <IconSymbol name="chevron.right" size={16} color={colors.tabIconDefault} />
-    </TouchableOpacity>
+
+      <TouchableOpacity style={styles.settingItem} onPress={handleCompleteProfile}>
+        <IconSymbol name="person.text.rectangle" size={20} color={colors.tint} />
+        <Text style={[styles.settingText, { color: colors.text }]}>
+          Complete Profile
+        </Text>
+        <IconSymbol name="chevron.right" size={16} color={colors.tabIconDefault} />
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.settingItem}>
+        <IconSymbol name="lock" size={20} color={colors.tint} />
+        <Text style={[styles.settingText, { color: colors.text }]}>
+          Privacy & Security
+        </Text>
+        <IconSymbol name="chevron.right" size={16} color={colors.tabIconDefault} />
+      </TouchableOpacity>
 
     <TouchableOpacity style={styles.settingItem}>
       <IconSymbol name="questionmark.circle" size={20} color={colors.tint} />
@@ -551,7 +564,8 @@ const SettingsSection: FC<{ colors: ColorScheme; handleLogout: () => void }> = (
       <Text style={styles.logoutText}>Sign Out</Text>
     </TouchableOpacity>
   </View>
-);
+  );
+};
 
 /**
  * Profile Screen Component
