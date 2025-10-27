@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserType } from '@/contexts/UserTypeContext';
+import { useUser } from '@/hooks/useAuthQuery';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -27,6 +28,11 @@ interface User {
   last_name?: string;
   profile_picture_url?: string;
   is_active: boolean;
+  gender?: 'male' | 'female';
+  height?: number;
+  weight?: number;
+  clothing_sizes?: Record<string, string>; // Flexible JSON for gender-specific sizes
+  full_body_image_url?: string;
 }
 
 interface ColorScheme {
@@ -184,33 +190,120 @@ const mockFashionStats: FashionStats = {
  * Profile Section Component
  * Displays user avatar, name, and basic information
  */
-const ProfileSection: FC<{ user: User | null; colors: ColorScheme }> = ({ user, colors }) => (
-  <View style={[styles.section, { backgroundColor: colors.background }]}>
-    <View style={styles.profileHeader}>
-      <View style={[styles.avatarContainer, { backgroundColor: colors.tint }]}>
-        {user?.profile_picture_url ? (
-          <Image
-            source={{ uri: user.profile_picture_url }}
-            style={styles.avatar}
-          />
-        ) : (
-          <IconSymbol name="person.fill" size={40} color="white" />
-        )}
-      </View>
-      <View style={styles.userInfo}>
-        <Text style={[styles.userName, { color: colors.text }]}>
-          {user?.first_name && user?.last_name 
-            ? `${user.first_name} ${user.last_name}`
-            : user?.username || 'User'
-          }
-        </Text>
-        <Text style={[styles.userEmail, { color: colors.tabIconDefault }]}>
-          {user?.email}
-        </Text>
+const ProfileSection: FC<{ user: User | null; colors: ColorScheme }> = ({ user, colors }) => {
+  return (
+    <View style={[styles.section, { backgroundColor: colors.background }]}>
+      <View style={styles.profileHeader}>
+        <View style={[styles.avatarContainer, { backgroundColor: colors.tint }]}>
+          {user?.profile_picture_url ? (
+            <Image
+              source={{ uri: user.profile_picture_url }}
+              style={styles.avatar}
+            />
+          ) : (
+            <IconSymbol name="person.fill" size={40} color="white" />
+          )}
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={[styles.userName, { color: colors.text }]}>
+            {user?.first_name && user?.last_name 
+              ? `${user.first_name} ${user.last_name}`
+              : user?.username || 'User'
+            }
+          </Text>
+          <Text style={[styles.userEmail, { color: colors.tabIconDefault }]}>
+            {user?.email}
+          </Text>
+        </View>
       </View>
     </View>
-  </View>
-);
+  );
+};
+
+/**
+ * Personal Details Section
+ * Shows user profile information like gender, height, weight, and clothing sizes
+ */
+const PersonalDetailsSection: FC<{ user: User | null; colors: ColorScheme }> = ({ user, colors }) => {
+  const clothingSizes = user?.clothing_sizes || {};
+  
+  // Collect only the most essential personal details (4 items fit perfectly in a 2x2 grid)
+  const details = [];
+  
+  if (user?.height) {
+    details.push({ icon: 'ruler' as const, label: 'Height', value: `${user.height}cm` });
+  }
+  if (user?.weight) {
+    details.push({ icon: 'scalemass' as const, label: 'Weight', value: `${user.weight}kg` });
+  }
+  if (clothingSizes.shoe) {
+    details.push({ icon: 'tshirt.fill' as const, label: 'Shoe Size', value: clothingSizes.shoe });
+  }
+  if (clothingSizes.shirt || clothingSizes.top) {
+    details.push({ icon: 'tshirt.fill' as const, label: user?.gender === 'male' ? 'Shirt' : 'Top', value: clothingSizes.shirt || clothingSizes.top || '' });
+  }
+  
+  return (
+    <View style={[styles.section, { backgroundColor: colors.background }]}>
+      <View style={styles.sectionHeader}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Personal Details
+        </ThemedText>
+        <TouchableOpacity onPress={() => router.push('/profile-completion')}>
+          <ThemedText style={[styles.viewAllText, { color: colors.tint }]}>
+            Edit
+          </ThemedText>
+        </TouchableOpacity>
+      </View>
+      
+      {details.length > 0 ? (
+        <>
+          {/* Full Body Image */}
+          {user?.full_body_image_url && (
+            <View style={styles.fullBodyContainer}>
+              <Image 
+                source={{ uri: user.full_body_image_url }} 
+                style={styles.fullBodyImage}
+              />
+              <ThemedText style={[styles.fullBodyLabel, { color: colors.tabIconDefault }]}>
+                Full Body Photo
+              </ThemedText>
+            </View>
+          )}
+          
+          <View style={styles.detailsGrid}>
+          {details.map((detail) => (
+            <View key={detail.label} style={[styles.detailCard, { backgroundColor: colors.background }]}>
+              <IconSymbol name={detail.icon} size={24} color={colors.tint} />
+              <ThemedText style={[styles.detailCardValue, { color: colors.text }]}>
+                {detail.value}
+              </ThemedText>
+              <ThemedText style={[styles.detailCardLabel, { color: colors.tabIconDefault }]}>
+                {detail.label}
+              </ThemedText>
+            </View>
+          ))}
+          </View>
+        </>
+      ) : (
+        <View style={styles.emptyState}>
+          <IconSymbol name="person.circle" size={48} color={colors.tabIconDefault} />
+          <ThemedText style={[styles.emptyStateText, { color: colors.tabIconDefault }]}>
+            No personal details added yet
+          </ThemedText>
+          <TouchableOpacity 
+            style={[styles.emptyStateButton, { backgroundColor: colors.tint }]}
+            onPress={() => router.push('/profile-completion')}
+          >
+            <ThemedText style={styles.emptyStateButtonText}>
+              Add Details
+            </ThemedText>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+};
 
 /**
  * Style Insights Section
@@ -257,64 +350,64 @@ const StyleInsightsSection: FC<{ colors: ColorScheme }> = ({ colors }) => (
  * Shows comprehensive wardrobe and style metrics
  */
 const FashionStatsSection: FC<{ colors: ColorScheme; stats: FashionStats }> = ({ colors, stats }) => (
-  <View style={[styles.section, { backgroundColor: colors.background }]}>
-    <ThemedText type="subtitle" style={styles.sectionTitle}>
-      Fashion Analytics
-    </ThemedText>
-    
-    <View style={styles.statsGrid}>
-      <View style={[styles.statItem, { backgroundColor: colors.background }]}>
-        <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
-          {stats.totalOutfits}
-        </ThemedText>
-        <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
-          Total Outfits
-        </ThemedText>
-      </View>
+    <View style={[styles.section, { backgroundColor: colors.background }]}>
+      <ThemedText type="subtitle" style={styles.sectionTitle}>
+        Fashion Analytics
+      </ThemedText>
       
-      <View style={[styles.statItem, { backgroundColor: colors.background }]}>
-        <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
-          {stats.styleScore}%
-        </ThemedText>
-        <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
-          Style Score
-        </ThemedText>
+      <View style={styles.statsGrid}>
+        <View style={[styles.statItem, { backgroundColor: colors.background }]}>
+          <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
+            {stats.totalOutfits}
+          </ThemedText>
+          <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
+            Total Outfits
+          </ThemedText>
+        </View>
+        
+        <View style={[styles.statItem, { backgroundColor: colors.background }]}>
+          <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
+            {stats.styleScore}%
+          </ThemedText>
+          <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
+            Style Score
+          </ThemedText>
+        </View>
+        
+        <View style={[styles.statItem, { backgroundColor: colors.background }]}>
+          <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
+            {stats.sustainabilityScore}%
+          </ThemedText>
+          <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
+            Sustainability
+          </ThemedText>
+        </View>
+        
+        <View style={[styles.statItem, { backgroundColor: colors.background }]}>
+          <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
+            {stats.itemsAddedThisMonth}
+          </ThemedText>
+          <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
+            Items Added This Month
+          </ThemedText>
+        </View>
       </View>
-      
-      <View style={[styles.statItem, { backgroundColor: colors.background }]}>
-        <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
-          {stats.sustainabilityScore}%
-        </ThemedText>
-        <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
-          Sustainability
-        </ThemedText>
-      </View>
-      
-      <View style={[styles.statItem, { backgroundColor: colors.background }]}>
-        <ThemedText style={[styles.statNumber, { color: colors.tint }]}>
-          {stats.itemsAddedThisMonth}
-        </ThemedText>
-        <ThemedText style={[styles.statLabel, { color: colors.tabIconDefault }]}>
-          Items Added This Month
-        </ThemedText>
-      </View>
-    </View>
 
-    <View style={styles.quickStats}>
-      <View style={styles.quickStatItem}>
-        <IconSymbol name="paintpalette" size={16} color={colors.tint} />
-        <ThemedText style={[styles.quickStatText, { color: colors.text }]}>
-          Favorite Color: {stats.favoriteColor}
-        </ThemedText>
-      </View>
-      <View style={styles.quickStatItem}>
-        <IconSymbol name="star.fill" size={16} color={colors.tint} />
-        <ThemedText style={[styles.quickStatText, { color: colors.text }]}>
-          Most Worn: {stats.mostWornItem}
-        </ThemedText>
+      <View style={styles.quickStats}>
+        <View style={styles.quickStatItem}>
+          <IconSymbol name="paintpalette" size={16} color={colors.tint} />
+          <ThemedText style={[styles.quickStatText, { color: colors.text }]}>
+            Favorite Color: {stats.favoriteColor}
+          </ThemedText>
+        </View>
+        <View style={styles.quickStatItem}>
+          <IconSymbol name="star.fill" size={16} color={colors.tint} />
+          <ThemedText style={[styles.quickStatText, { color: colors.text }]}>
+            Most Worn: {stats.mostWornItem}
+          </ThemedText>
+        </View>
       </View>
     </View>
-  </View>
 );
 
 /**
@@ -580,7 +673,8 @@ const SettingsSection: FC<{ colors: ColorScheme; handleLogout: () => void }> = (
  * @see https://docs.expo.dev/versions/latest/sdk/securestore/ - User data from secure storage
  */
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { signOut } = useAuth();
+  const { data: user, isLoading: userLoading } = useUser(); // Fetch from API
   const { userType, setUserType } = useUserType();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -713,10 +807,22 @@ export default function ProfileScreen() {
     }, 100);
   };
 
+  // Show loading state while fetching user data
+  if (userLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ThemedText>Loading profile...</ThemedText>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <ProfileSection user={user} colors={colors} />
+        <ProfileSection user={user || null} colors={colors} />
+        <PersonalDetailsSection user={user || null} colors={colors} />
         <StyleInsightsSection colors={colors} />
         <FashionStatsSection colors={colors} stats={mockFashionStats} />
         <OutfitHistorySection colors={colors} />
@@ -780,6 +886,24 @@ const styles = StyleSheet.create({
   },
   userEmail: {
     fontSize: 16,
+  },
+  profileDetails: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginRight: 8,
+  },
+  detailText: {
+    fontSize: 14,
   },
   sectionTitle: {
     fontSize: 20,
@@ -890,6 +1014,66 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  // Personal Details Styles
+  detailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  detailCard: {
+    width: '48%',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  detailCardValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  detailCardLabel: {
+    fontSize: 12,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  emptyStateText: {
+    marginTop: 12,
+    marginBottom: 8,
+    fontSize: 14,
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  emptyStateButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  emptyStateButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  fullBodyContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  fullBodyImage: {
+    width: 150,
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  fullBodyLabel: {
+    fontSize: 12,
   },
   // Style Insights Styles
   insightsScroll: {

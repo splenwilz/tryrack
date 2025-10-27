@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, Image, Alert, TextInput } from 'react-native';
+import { useState, useEffect } from 'react';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router } from 'expo-router';
+import { useUser, useCompleteProfile } from '@/hooks/useAuthQuery';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 interface ProfileData {
   profileImage?: string;
@@ -12,10 +15,12 @@ interface ProfileData {
   gender: 'male' | 'female';
   height: string;
   weight: string;
+  // Gender-specific clothing sizes
   shoeSize: string;
-  topSize: string;
-  dressSize: string;
-  pantsSize: string;
+  topSize: string;  // Used for both male (shirt) and female (top)
+  dressSize?: string;  // Female only
+  pantsSize?: string;  // Both genders, different formats
+  jacketSize?: string;  // Male only
 }
 
 /**
@@ -28,63 +33,128 @@ export default function ProfileCompletionScreen() {
   const iconColor = useThemeColor({}, 'icon');
   const textColor = useThemeColor({}, 'text');
 
+  // Fetch current user from API
+  const { data: user, isLoading: isLoadingUser, error: userError } = useUser();
+  const { mutate: completeProfile, isPending: isSaving } = useCompleteProfile();
+
+  console.log('🔍 Profile Completion Debug - useUser result:', { user, isLoadingUser, userError });
+
   const [formData, setFormData] = useState<ProfileData>({
     gender: 'female',
     height: '',
     weight: '',
     shoeSize: '',
     topSize: '',
-    dressSize: '',
-    pantsSize: '',
+    dressSize: undefined,
+    pantsSize: undefined,
+    jacketSize: undefined,
   });
+
+  // Load existing user data when available
+  useEffect(() => {
+    console.log('🔍 Profile Completion Debug - useEffect triggered, user:', user);
+    
+    if (user) {
+      console.log('🔍 Profile Completion Debug - Setting form data from user:', {
+        profileImage: user.profile_picture_url,
+        fullBodyImage: user.full_body_image_url,
+        gender: user.gender,
+        height: user.height,
+        weight: user.weight,
+        clothing_sizes: user.clothing_sizes,
+      });
+      
+      // Extract clothing sizes from the new JSON format
+      const clothingSizes = user.clothing_sizes || {};
+      
+      const newFormData = {
+        profileImage: user.profile_picture_url || undefined,
+        fullBodyImage: user.full_body_image_url || undefined,
+        gender: (user.gender || 'female') as 'male' | 'female',
+        height: user.height?.toString() || '',
+        weight: user.weight?.toString() || '',
+        shoeSize: clothingSizes.shoe || '',
+        topSize: clothingSizes.shirt || clothingSizes.top || '', // shirt for male, top for female
+        dressSize: clothingSizes.dress || '',
+        pantsSize: clothingSizes.pants || '',
+        jacketSize: clothingSizes.jacket || '',
+      };
+      
+      setFormData(newFormData);
+      
+      console.log('🔍 Profile Completion Debug - Form data set:', newFormData);
+    }
+  }, [user]);
 
   const handleBackPress = () => {
     router.replace('/(tabs)');
   };
 
-  const handleImageUpload = (isProfilePhoto: boolean = true) => {
+  const handleImageUpload = async (isProfilePhoto: boolean = true) => {
     const photoType = isProfilePhoto ? 'Profile Photo' : 'Full Body Photo';
-    const mockUrls = isProfilePhoto 
-      ? [
-          'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=400&h=400&fit=crop',
-          'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop'
-        ]
-      : [
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=600&fit=crop',
-          'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=300&h=600&fit=crop'
-        ];
+    
+    // Request permissions
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission Required',
+        'We need access to your photos to upload images.'
+      );
+      return;
+    }
 
     Alert.alert(
       `Add ${photoType}`,
       'Choose an option',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Take Photo', 
-          onPress: () => {
-            // TODO: Implement camera functionality
-            const mockImageUrl = mockUrls[0];
-            if (isProfilePhoto) {
-              setFormData({ ...formData, profileImage: mockImageUrl });
-            } else {
-              setFormData({ ...formData, fullBodyImage: mockImageUrl });
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            // Check camera permissions
+            const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
+            if (cameraStatus.status !== 'granted') {
+              Alert.alert('Permission Required', 'Camera access is required to take photos.');
+              return;
             }
-            Alert.alert('Success', `${photoType} added!`);
-          }
+
+            // Launch camera with optimized quality
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: isProfilePhoto, // Only enable editing for profile photos (square)
+              aspect: isProfilePhoto ? [1, 1] : undefined, // No aspect restriction for full body
+              quality: 0.5, // Reduced from 0.8 for faster uploads
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+              const imageUri = result.assets[0].uri;
+              setFormData({
+                ...formData,
+                [isProfilePhoto ? 'profileImage' : 'fullBodyImage']: imageUri,
+              });
+            }
+          },
         },
-        { 
-          text: 'Choose from Gallery', 
-          onPress: () => {
-            // TODO: Implement gallery picker
-            const mockImageUrl = mockUrls[1];
-            if (isProfilePhoto) {
-              setFormData({ ...formData, profileImage: mockImageUrl });
-            } else {
-              setFormData({ ...formData, fullBodyImage: mockImageUrl });
+        {
+          text: 'Choose from Gallery',
+          onPress: async () => {
+            // Launch image picker with optimized quality
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: isProfilePhoto, // Only enable editing for profile photos (square)
+              aspect: isProfilePhoto ? [1, 1] : undefined, // No aspect restriction for full body
+              quality: 0.5, // Reduced from 0.8 for faster uploads
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+              const imageUri = result.assets[0].uri;
+              setFormData({
+                ...formData,
+                [isProfilePhoto ? 'profileImage' : 'fullBodyImage']: imageUri,
+              });
             }
-            Alert.alert('Success', `${photoType} added!`);
-          }
-        }
+          },
+        },
       ]
     );
   };
@@ -93,30 +163,170 @@ export default function ProfileCompletionScreen() {
     setFormData({ ...formData, gender });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    console.log('📤 Frontend - Starting profile save...');
+    const saveStartTime = Date.now();
+    
     // Gender is required for better recommendations
     if (!formData.gender || (formData.gender !== 'male' && formData.gender !== 'female')) {
       Alert.alert('Required', 'Please select your gender to continue');
       return;
     }
+
+    if (!user?.id) {
+      Alert.alert('Error', 'User not found');
+      return;
+    }
+
+    console.log('📤 Frontend - Starting image conversion...');
+    // Convert local images to base64 if they're local file URIs
+    let profileImageUrl = formData.profileImage;
+    let fullBodyImageUrl = formData.fullBodyImage;
+
+    if (formData.profileImage?.startsWith('file://')) {
+      console.log('📤 Frontend - Converting profile image...');
+      const convertStart = Date.now();
+      profileImageUrl = await convertImageToBase64(formData.profileImage);
+      console.log(`⏱️ Frontend - Profile image conversion took: ${Date.now() - convertStart}ms`);
+    }
+
+    if (formData.fullBodyImage?.startsWith('file://')) {
+      console.log('📤 Frontend - Converting full body image...');
+      const convertStart = Date.now();
+      fullBodyImageUrl = await convertImageToBase64(formData.fullBodyImage);
+      console.log(`⏱️ Frontend - Full body image conversion took: ${Date.now() - convertStart}ms`);
+    }
+
+    console.log('📤 Frontend - Preparing API request...');
+    const prepStart = Date.now();
+
+    // Prepare clothing sizes based on gender
+    const clothing_sizes: Record<string, string> = {};
     
-    // TODO: Call backend API to save profile data
-    console.log('Profile data:', formData);
+    // Common sizes for both genders
+    if (formData.shoeSize) clothing_sizes.shoe = formData.shoeSize;
+    if (formData.pantsSize) clothing_sizes.pants = formData.pantsSize;
     
-    Alert.alert(
-      'Profile Saved!',
-      'You can always update your profile later from settings for better recommendations.',
-      [
-        {
-          text: 'Continue',
-          onPress: () => {
-            // Navigate to main app
-            router.replace('/(tabs)');
-          }
-        }
-      ]
+    // Gender-specific sizes
+    if (formData.gender === 'male') {
+      if (formData.topSize) clothing_sizes.shirt = formData.topSize;
+      if (formData.jacketSize) clothing_sizes.jacket = formData.jacketSize;
+    } else if (formData.gender === 'female') {
+      if (formData.topSize) clothing_sizes.top = formData.topSize;
+      if (formData.dressSize) clothing_sizes.dress = formData.dressSize;
+    }
+    
+    // Prepare profile data for API
+    const profileData = {
+      gender: formData.gender,
+      height: formData.height ? parseFloat(formData.height) : undefined,
+      weight: formData.weight ? parseFloat(formData.weight) : undefined,
+      clothing_sizes: Object.keys(clothing_sizes).length > 0 ? clothing_sizes : undefined,
+      profile_picture_url: profileImageUrl || undefined,
+      full_body_image_url: fullBodyImageUrl || undefined,
+    };
+
+    const dataSize = JSON.stringify(profileData).length;
+    console.log(`⏱️ Frontend - Data prep took: ${Date.now() - prepStart}ms`);
+    console.log(`📤 Frontend - Sending to API (${dataSize} bytes)...`);
+
+    const apiStartTime = Date.now();
+    // Call API to save/update profile
+    completeProfile(
+      { userId: user.id, profileData },
+      {
+        onSuccess: () => {
+          const totalTime = Date.now() - saveStartTime;
+          console.log(`✅ Frontend - Profile saved successfully! Total time: ${totalTime}ms`);
+          Alert.alert(
+            'Profile Saved!',
+            'You can always update your profile later from settings for better recommendations.',
+            [
+              {
+                text: 'Continue',
+                onPress: () => {
+                  router.replace('/(tabs)');
+                },
+              },
+            ]
+          );
+        },
+        onError: (error) => {
+          console.error(`❌ Frontend - API error:`, error);
+          Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');
+        },
+      }
     );
   };
+
+  const convertImageToBase64 = async (imageUri: string): Promise<string> => {
+    console.log('🔄 Frontend - Starting image conversion:', imageUri.substring(0, 50));
+    const startTime = Date.now();
+    
+    try {
+      // If it's already a data URL or external URL, return as is
+      if (imageUri.startsWith('data:') || imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+        console.log('🔄 Frontend - Image is already base64 or external URL, skipping conversion');
+        return imageUri;
+      }
+
+      // Use ImageManipulator to convert to base64 (handles local files properly)
+      console.log('🔄 Frontend - Converting with ImageManipulator...');
+      const readStart = Date.now();
+      
+      const { base64, uri: newUri } = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [], // No manipulations needed, just conversion
+        { compress: 0.5, base64: true }
+      );
+      
+      console.log(`⏱️ Frontend - Conversion took: ${Date.now() - readStart}ms`);
+      
+      if (!base64) {
+        throw new Error('Failed to get base64 from ImageManipulator');
+      }
+      
+      // Determine content type based on file extension
+      const extension = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+      const contentType = extension === 'png' ? 'image/png' : 'image/jpeg';
+      
+      const dataUri = `data:${contentType};base64,${base64}`;
+      const totalTime = Date.now() - startTime;
+      console.log(`✅ Frontend - Conversion complete! Total time: ${totalTime}ms, Base64 length: ${dataUri.length}`);
+      
+      return dataUri;
+    } catch (error) {
+      console.error('❌ Frontend - Error converting image to base64:', error);
+      // Fallback: try fetch as last resort
+      try {
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (fallbackError) {
+        console.error('❌ Frontend - Fallback also failed:', fallbackError);
+        return imageUri; // Return original as last resort
+      }
+    }
+  };
+
+  // Show loading state while fetching user data
+  if (isLoadingUser) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={tintColor} />
+          <ThemedText style={[styles.loadingText, { color: iconColor }]}>
+            Loading profile...
+          </ThemedText>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
@@ -138,7 +348,7 @@ export default function ProfileCompletionScreen() {
           <ThemedText style={styles.sectionTitle}>Profile Photo</ThemedText>
           <TouchableOpacity 
             style={styles.imageContainer}
-            onPress={handleImageUpload}
+            onPress={() => handleImageUpload(true)}
           >
             {formData.profileImage ? (
               <Image source={{ uri: formData.profileImage }} style={styles.profileImage} />
@@ -264,62 +474,124 @@ export default function ProfileCompletionScreen() {
         {/* Clothing Sizes */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Clothing Sizes</ThemedText>
+          <ThemedText style={[styles.sectionSubtitle, { color: iconColor }]}>
+            Help us recommend clothes that fit you perfectly
+          </ThemedText>
           
+          {/* Common: Shoe Size */}
           <View style={styles.inputRow}>
             <View style={styles.inputContainer}>
               <ThemedText style={styles.inputLabel}>Shoe Size</ThemedText>
               <TextInput
                 style={[styles.input, { color: textColor, borderColor: iconColor }]}
-                placeholder="e.g., 7"
+                placeholder={formData.gender === 'male' ? "e.g., 10" : "e.g., 7"}
                 placeholderTextColor={iconColor}
                 value={formData.shoeSize}
                 onChangeText={(text) => setFormData({ ...formData, shoeSize: text })}
                 keyboardType="numeric"
               />
             </View>
-            <View style={styles.inputContainer}>
-              <ThemedText style={styles.inputLabel}>Top Size</ThemedText>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor: iconColor }]}
-                placeholder="e.g., M"
-                placeholderTextColor={iconColor}
-                value={formData.topSize}
-                onChangeText={(text) => setFormData({ ...formData, topSize: text })}
-              />
-            </View>
           </View>
 
-          <View style={styles.inputRow}>
-            <View style={styles.inputContainer}>
-              <ThemedText style={styles.inputLabel}>Dress Size</ThemedText>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor: iconColor }]}
-                placeholder="e.g., 8"
-                placeholderTextColor={iconColor}
-                value={formData.dressSize}
-                onChangeText={(text) => setFormData({ ...formData, dressSize: text })}
-              />
-            </View>
-            <View style={styles.inputContainer}>
-              <ThemedText style={styles.inputLabel}>Pants Size</ThemedText>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor: iconColor }]}
-                placeholder="e.g., 32"
-                placeholderTextColor={iconColor}
-                value={formData.pantsSize}
-                onChangeText={(text) => setFormData({ ...formData, pantsSize: text })}
-              />
-            </View>
-          </View>
+          {/* Gender-specific: Male Sizes */}
+          {formData.gender === 'male' && (
+            <>
+              <View style={styles.inputRow}>
+                <View style={styles.inputContainer}>
+                  <ThemedText style={styles.inputLabel}>Shirt Size</ThemedText>
+                  <TextInput
+                    style={[styles.input, { color: textColor, borderColor: iconColor }]}
+                    placeholder="e.g., M"
+                    placeholderTextColor={iconColor}
+                    value={formData.topSize}
+                    onChangeText={(text) => setFormData({ ...formData, topSize: text })}
+                  />
+                </View>
+                <View style={styles.inputContainer}>
+                  <ThemedText style={styles.inputLabel}>Jacket/Blazer Size</ThemedText>
+                  <TextInput
+                    style={[styles.input, { color: textColor, borderColor: iconColor }]}
+                    placeholder="e.g., 40"
+                    placeholderTextColor={iconColor}
+                    value={formData.jacketSize || ''}
+                    onChangeText={(text) => setFormData({ ...formData, jacketSize: text })}
+                  />
+                </View>
+              </View>
+              <View style={styles.inputRow}>
+                <View style={styles.inputContainer}>
+                  <ThemedText style={styles.inputLabel}>Pants Size (Waist × Inseam)</ThemedText>
+                  <TextInput
+                    style={[styles.input, { color: textColor, borderColor: iconColor }]}
+                    placeholder="e.g., 32x30"
+                    placeholderTextColor={iconColor}
+                    value={formData.pantsSize || ''}
+                    onChangeText={(text) => setFormData({ ...formData, pantsSize: text })}
+                  />
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* Gender-specific: Female Sizes */}
+          {formData.gender === 'female' && (
+            <>
+              <View style={styles.inputRow}>
+                <View style={styles.inputContainer}>
+                  <ThemedText style={styles.inputLabel}>Top/Blouse Size</ThemedText>
+                  <TextInput
+                    style={[styles.input, { color: textColor, borderColor: iconColor }]}
+                    placeholder="e.g., M"
+                    placeholderTextColor={iconColor}
+                    value={formData.topSize}
+                    onChangeText={(text) => setFormData({ ...formData, topSize: text })}
+                  />
+                </View>
+                <View style={styles.inputContainer}>
+                  <ThemedText style={styles.inputLabel}>Dress Size</ThemedText>
+                  <TextInput
+                    style={[styles.input, { color: textColor, borderColor: iconColor }]}
+                    placeholder="e.g., 8"
+                    placeholderTextColor={iconColor}
+                    value={formData.dressSize || ''}
+                    onChangeText={(text) => setFormData({ ...formData, dressSize: text })}
+                  />
+                </View>
+              </View>
+              <View style={styles.inputRow}>
+                <View style={styles.inputContainer}>
+                  <ThemedText style={styles.inputLabel}>Pants/Jeans Size</ThemedText>
+                  <TextInput
+                    style={[styles.input, { color: textColor, borderColor: iconColor }]}
+                    placeholder="e.g., 28 or 28x30"
+                    placeholderTextColor={iconColor}
+                    value={formData.pantsSize || ''}
+                    onChangeText={(text) => setFormData({ ...formData, pantsSize: text })}
+                  />
+                </View>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Save Button */}
         <TouchableOpacity 
-          style={[styles.saveButton, { backgroundColor: tintColor }]}
+          style={[
+            styles.saveButton, 
+            { backgroundColor: tintColor },
+            isSaving && styles.saveButtonDisabled
+          ]}
           onPress={handleSave}
+          disabled={isSaving}
         >
-          <IconSymbol name="checkmark.circle.fill" size={20} color="white" />
-          <ThemedText style={styles.saveButtonText}>Complete Profile</ThemedText>
+          {isSaving ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <IconSymbol name="checkmark.circle.fill" size={20} color="white" />
+          )}
+          <ThemedText style={styles.saveButtonText}>
+            {isSaving ? 'Saving...' : 'Complete Profile'}
+          </ThemedText>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -489,6 +761,18 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
   },
 });
 

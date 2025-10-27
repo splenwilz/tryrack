@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 
 class UserBase(BaseModel):
@@ -40,11 +40,8 @@ class UserInDB(UserBase):
     gender: Optional[str] = None
     height: Optional[float] = None
     weight: Optional[float] = None
-    shoe_size: Optional[str] = None
-    top_size: Optional[str] = None
-    dress_size: Optional[str] = None
-    pants_size: Optional[str] = None
     full_body_image_url: Optional[str] = None
+    clothing_sizes: Optional[Dict[str, str]] = None  # Flexible JSON for gender-specific sizes
     
     class Config:
         from_attributes = True
@@ -71,9 +68,6 @@ class ProfileCompletion(BaseModel):
     gender: Optional[str] = None
     height: Optional[float] = None
     weight: Optional[float] = None
-    shoe_size: Optional[str] = None
-    top_size: Optional[str] = None
-    dress_size: Optional[str] = None
-    pants_size: Optional[str] = None
+    clothing_sizes: Optional[Dict[str, str]] = None  # {"shoe": "10", "shirt": "M", "pants": "32x30"} etc.
     profile_picture_url: Optional[str] = None
     full_body_image_url: Optional[str] = None

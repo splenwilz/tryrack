@@ -26,6 +26,12 @@ interface User {
   profile_picture_url?: string;
   is_active: boolean; // Added from backend
   profile_completed?: boolean; // Profile completion status
+  gender?: 'male' | 'female'; // User gender
+  height?: number; // Height in cm
+  weight?: number; // Weight in kg
+  full_body_image_url?: string; // Full body image for virtual try-on
+  clothing_sizes?: Record<string, string>; // Flexible JSON for gender-specific sizes
+  user_type?: 'individual' | 'boutique'; // User account type
 }
 
 interface AuthState {

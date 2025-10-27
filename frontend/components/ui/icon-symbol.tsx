@@ -57,6 +57,9 @@ const MAPPING = {
   'paperplane': 'send',
   'eye.fill': 'visibility',
   'trash.fill': 'delete',
+  'ruler': 'square-foot',
+  'scalemass': 'monitor-weight',
+  'person.circle': 'account-circle',
 } as IconMapping;
 
 /**
