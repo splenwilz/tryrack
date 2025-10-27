@@ -175,11 +175,22 @@ async def complete_user_profile(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Forbidden: You can only update your own profile"
             )
-    except Exception as e:
+    except ValueError as e:
+        # Token verification failed - don't catch 403 Forbidden
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
-        )
+            detail="Invalid token"
+        ) from None
+    except HTTPException:
+        # Let 403 Forbidden and other HTTPExceptions propagate
+        raise
+    except Exception as e:
+        # Catch other unexpected errors without leaking details
+        logger.exception("Unexpected error during authorization check")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        ) from None
     
     user = get_user(db, user_id=user_id)
     if not user:
@@ -374,16 +385,27 @@ async def update_user_type(
             )
         
         # Check if caller is authorized to update this profile
-        if caller_id is None or (int(caller_id) != int(user_id)):
+        if int(caller_id) != int(user_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Forbidden: You can only update your own profile"
             )
-    except Exception as e:
+    except ValueError as e:
+        # Token verification failed - don't catch 403 Forbidden
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
-        )
+            detail="Invalid token"
+        ) from None
+    except HTTPException:
+        # Let 403 Forbidden and other HTTPExceptions propagate
+        raise
+    except Exception as e:
+        # Catch other unexpected errors without leaking details
+        logger.exception("Unexpected error during authorization check")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        ) from None
     
     user = get_user(db, user_id=user_id)
     if not user:
