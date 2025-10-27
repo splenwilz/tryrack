@@ -4,6 +4,9 @@ from typing import List, Optional, Annotated
 import base64
 import os
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.db import get_db
 from app.schemas import User, UserCreate, UserUpdate, ProfileCompletion
@@ -64,11 +67,19 @@ async def get_current_user(
             )
         
         return user
-    except Exception as e:
+    except ValueError as e:
+        # Catch specific ValueError from verify_token
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
-        )
+            detail="Invalid token"
+        ) from None
+    except Exception as e:
+        # Catch other unexpected errors
+        logger.exception("Unexpected error during token verification")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        ) from None
 
 
 @router.get("/{user_id}", response_model=User)
@@ -185,10 +196,13 @@ async def complete_user_profile(
         """Extract MIME type and file extension from data URL."""
         parts = data_url.split(',')
         if len(parts) != 2:
-            return 'image/jpeg', 'jpg'
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid data URL format"
+            )
         
         header = parts[0]
-        mime = header.split(';')[0].split(':')[1] if ':' in header else 'image/jpeg'
+        mime = header.split(';')[0].split(':')[1] if ':' in header else None
         
         extension_map = {
             "image/jpeg": "jpg",
@@ -196,7 +210,14 @@ async def complete_user_profile(
             "image/png": "png",
             "image/webp": "webp"
         }
-        ext = extension_map.get(mime, "jpg")
+        
+        if not mime or mime not in extension_map:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"Unsupported image MIME type: {mime or 'unknown'}"
+            )
+        
+        ext = extension_map[mime]
         return mime, ext
     
     # Log without sensitive data
@@ -249,22 +270,37 @@ async def complete_user_profile(
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             futures = [executor.submit(upload_image, img_type, img_data, key, mime) for img_type, img_data, key, mime in upload_tasks]
-            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+            results = []
+            
+            # Handle thread exceptions and fail fast on upload errors
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    results.append(future.result())
+                except Exception as err:
+                    logger.exception("Image upload failed", extra={"error": str(err)})
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Image upload failed"
+                    ) from None
         
         parallel_time = (time.time() - parallel_start) * 1000
         logger.info("All uploads complete", extra={"time_ms": parallel_time})
         
-        # Update user with uploaded URLs
+        # Update user with uploaded URLs - fail fast if any upload failed
         for img_type, s3_url in results:
-            if s3_url:
-                if img_type == 'profile':
-                    user.profile_picture_url = s3_url
-                    logger.debug("Profile image uploaded", extra={"url": s3_url})
-                else:
-                    user.full_body_image_url = s3_url
-                    logger.debug("Full body image uploaded", extra={"url": s3_url})
-            else:
+            if not s3_url:
                 logger.error("Failed to upload image", extra={"type": img_type})
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"{img_type} upload failed"
+                )
+            
+            if img_type == 'profile':
+                user.profile_picture_url = s3_url
+                logger.debug("Profile image uploaded", extra={"url": s3_url})
+            else:
+                user.full_body_image_url = s3_url
+                logger.debug("Full body image uploaded", extra={"url": s3_url})
     
     # Update profile fields
     if profile_data.gender is not None:
