@@ -128,11 +128,47 @@ async def delete_user_by_id(user_id: int, db: Session = Depends(get_db)):
 async def complete_user_profile(
     user_id: int,
     profile_data: ProfileCompletion,
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Complete user profile with body measurements and sizing."""
     from app.services.s3_service import upload_file_from_base64
     from app.core.config import settings
+    from app.core.auth import verify_token
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # Security: Verify authorization header
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header missing"
+        )
+    
+    try:
+        token = authorization.replace("Bearer ", "").strip()
+        payload = verify_token(token)
+        caller_id = payload.get("sub")
+        
+        if not caller_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+        
+        # Check if caller is authorized to update this profile
+        if int(caller_id) != int(user_id):
+            # Forbidden - user trying to update another user's profile
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You can only update your own profile"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}"
+        )
     
     user = get_user(db, user_id=user_id)
     if not user:
@@ -144,64 +180,91 @@ async def complete_user_profile(
     import time
     request_start = time.time()
     
-    # Upload images to S3 if provided (base64 data)
-    print(f"🔴 Backend - Profile completion request received for user {user_id}")
-    print(f"🔴 Backend - profile_picture_url exists: {profile_data.profile_picture_url is not None}")
-    print(f"🔴 Backend - profile_picture_url preview: {profile_data.profile_picture_url[:50] if profile_data.profile_picture_url else None}...")
-    print(f"🔴 Backend - Bucket: {settings.AWS_S3_BUCKET_NAME}")
+    # Helper function to parse MIME type and extension from data URL
+    def parse_mime_and_ext(data_url: str) -> tuple[str, str]:
+        """Extract MIME type and file extension from data URL."""
+        parts = data_url.split(',')
+        if len(parts) != 2:
+            return 'image/jpeg', 'jpg'
+        
+        header = parts[0]
+        mime = header.split(';')[0].split(':')[1] if ':' in header else 'image/jpeg'
+        
+        extension_map = {
+            "image/jpeg": "jpg",
+            "image/jpg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp"
+        }
+        ext = extension_map.get(mime, "jpg")
+        return mime, ext
+    
+    # Log without sensitive data
+    logger.info("Profile completion request received", extra={"user_id": user_id})
+    logger.debug("Profile picture present: %s", bool(profile_data.profile_picture_url))
+    # Do not log base64 previews or raw secrets
     
     # Prepare upload tasks for parallel execution
     upload_tasks = []
     
     if profile_data.profile_picture_url and profile_data.profile_picture_url.startswith('data:'):
-        s3_key = f"users/{user_id}/profile.jpg"
-        upload_tasks.append(('profile', profile_data.profile_picture_url, s3_key))
+        mime, ext = parse_mime_and_ext(profile_data.profile_picture_url)
+        s3_key = f"users/{user_id}/profile.{ext}"
+        upload_tasks.append(('profile', profile_data.profile_picture_url, s3_key, mime))
     elif profile_data.profile_picture_url:
         # External URL - use as is
-        print(f"🔴 Backend - Using external URL for profile picture")
+        logger.debug("Using external URL for profile picture")
         user.profile_picture_url = profile_data.profile_picture_url
     
     if profile_data.full_body_image_url and profile_data.full_body_image_url.startswith('data:'):
-        s3_key = f"users/{user_id}/fullbody.jpg"
-        upload_tasks.append(('fullbody', profile_data.full_body_image_url, s3_key))
+        mime, ext = parse_mime_and_ext(profile_data.full_body_image_url)
+        s3_key = f"users/{user_id}/fullbody.{ext}"
+        upload_tasks.append(('fullbody', profile_data.full_body_image_url, s3_key, mime))
     elif profile_data.full_body_image_url:
         # External URL - use as is
-        print(f"🔴 Backend - Using external URL for full body image")
+        logger.debug("Using external URL for full body image")
         user.full_body_image_url = profile_data.full_body_image_url
     
     # Upload images in parallel
     if upload_tasks:
+        # Check if S3 is configured
+        if not settings.AWS_S3_BUCKET_NAME:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="S3 service not configured. Cannot upload images."
+            )
+        
         import concurrent.futures
         
-        print(f"🔴 Backend - Uploading {len(upload_tasks)} images in parallel...")
+        logger.info("Starting parallel uploads", extra={"count": len(upload_tasks)})
         parallel_start = time.time()
         
-        def upload_image(image_type, base64_data, s3_key):
+        def upload_image(image_type, base64_data, s3_key, content_type):
             upload_start = time.time()
-            print(f"🔴 Backend - Starting {image_type} image upload: {s3_key}")
-            s3_url = upload_file_from_base64(base64_data, settings.AWS_S3_BUCKET_NAME, s3_key)
+            logger.debug("Starting image upload", extra={"type": image_type, "key": s3_key})
+            s3_url = upload_file_from_base64(base64_data, settings.AWS_S3_BUCKET_NAME, s3_key, content_type)
             upload_time = (time.time() - upload_start) * 1000
-            print(f"⏱️ Backend - {image_type} image upload took: {upload_time:.0f}ms")
+            logger.debug("Image upload complete", extra={"type": image_type, "time_ms": upload_time})
             return (image_type, s3_url)
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            futures = [executor.submit(upload_image, img_type, img_data, key) for img_type, img_data, key in upload_tasks]
+            futures = [executor.submit(upload_image, img_type, img_data, key, mime) for img_type, img_data, key, mime in upload_tasks]
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
         
         parallel_time = (time.time() - parallel_start) * 1000
-        print(f"✅ Backend - All uploads complete! Total parallel time: {parallel_time:.0f}ms")
+        logger.info("All uploads complete", extra={"time_ms": parallel_time})
         
         # Update user with uploaded URLs
         for img_type, s3_url in results:
             if s3_url:
                 if img_type == 'profile':
                     user.profile_picture_url = s3_url
-                    print(f"✅ Backend - Profile image uploaded to S3: {s3_url}")
+                    logger.debug("Profile image uploaded", extra={"url": s3_url})
                 else:
                     user.full_body_image_url = s3_url
-                    print(f"✅ Backend - Full body image uploaded to S3: {s3_url}")
+                    logger.debug("Full body image uploaded", extra={"url": s3_url})
             else:
-                print(f"❌ Backend - Failed to upload {img_type} image to S3")
+                logger.error("Failed to upload image", extra={"type": img_type})
     
     # Update profile fields
     if profile_data.gender is not None:
@@ -213,16 +276,31 @@ async def complete_user_profile(
     if profile_data.clothing_sizes is not None:
         user.clothing_sizes = profile_data.clothing_sizes
     
-    # Mark profile as completed
-    user.profile_completed = True
+    # Mark profile as completed only if essential data exists
+    # Check if at least one field has been populated or if images were provided
+    has_essential_data = (
+        profile_data.gender is not None or
+        profile_data.height is not None or
+        profile_data.weight is not None or
+        profile_data.clothing_sizes is not None or
+        user.profile_picture_url or
+        user.full_body_image_url
+    )
+    
+    if has_essential_data:
+        user.profile_completed = True
+        logger.info("Profile marked as completed", extra={"user_id": user_id})
+    else:
+        logger.warning("Profile not marked as completed - no essential data provided", extra={"user_id": user_id})
     
     db_commit_start = time.time()
     db.commit()
     db.refresh(user)
-    print(f"⏱️ Backend - DB commit took: {(time.time() - db_commit_start)*1000:.0f}ms")
+    commit_time = (time.time() - db_commit_start) * 1000
+    logger.debug("DB commit complete", extra={"time_ms": commit_time})
     
     total_time = (time.time() - request_start) * 1000
-    print(f"✅ Backend - Request complete! Total: {total_time:.0f}ms")
+    logger.info("Profile completion request successful", extra={"time_ms": total_time})
     
     return user
 
@@ -231,10 +309,45 @@ async def complete_user_profile(
 async def update_user_type(
     user_id: int,
     user_type: str = 'individual',
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """Update user type (switch between individual and boutique)."""
     from app.models import UserType
+    from app.core.auth import verify_token
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # Security: Verify authorization header
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header missing"
+        )
+    
+    try:
+        token = authorization.replace("Bearer ", "").strip()
+        payload = verify_token(token)
+        caller_id = payload.get("sub")
+        
+        if not caller_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token"
+            )
+        
+        # Check if caller is authorized to update this profile
+        if caller_id is None or (int(caller_id) != int(user_id)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You can only update your own profile"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}"
+        )
     
     user = get_user(db, user_id=user_id)
     if not user:
@@ -249,6 +362,8 @@ async def update_user_type(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="user_type must be 'individual' or 'boutique'"
         )
+    
+    logger.info("Updating user type", extra={"user_id": user_id, "user_type": user_type})
     
     # Update user_type
     user.user_type = UserType.INDIVIDUAL if user_type == 'individual' else UserType.BOUTIQUE
