@@ -12,14 +12,15 @@ import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { useAuth } from '@/contexts/AuthContext';
 import { signUpSchema, type SignUpFormData } from '@/schemas/authSchemas';
-import { FormInput, PrimaryButton } from '@/components/auth/FormComponents';
+import { FormInput, PrimaryButton, SocialButton } from '@/components/auth/FormComponents';
 
 /**
  * Sign Up Screen Component
- * Allows users to create a new account with email and password
+ * Allows users to create a new account with email/password or social providers
  * 
  * Features:
  * - Email, password, and password confirmation inputs
+ * - Social sign-up options (Google, Apple)
  * - Form validation using React Hook Form and Yup
  * - Terms and conditions acceptance
  * - Error handling and loading states
@@ -30,7 +31,7 @@ import { FormInput, PrimaryButton } from '@/components/auth/FormComponents';
  * @see https://reactnative.dev/docs/scrollview - Scrollable content
  */
 export default function SignUpScreen() {
-  const { signUp, isLoading } = useAuth();
+  const { signUp, socialSignIn, isLoading } = useAuth();
 
   const {
     control,
@@ -59,7 +60,7 @@ export default function SignUpScreen() {
       console.log('🔍 Sign Up Screen Debug - Sign up result:', result);
       
       if (result.success) {
-        if (result.requiresVerification) {
+        if (result.requiresVerification && result.verificationData) {
           console.log('🔍 Sign Up Screen Debug - Verification required, navigating to verification screen');
           // Navigate to email verification screen with verification data
           router.push({
@@ -96,6 +97,33 @@ export default function SignUpScreen() {
    */
   const handleSignIn = () => {
     router.push('/auth/sign-in');
+  };
+
+  /**
+   * Handle social sign up
+   * Initiates OAuth flow with the selected provider for account creation
+   * 
+   * @param provider - Social provider ('google', 'apple')
+   */
+  const handleSocialSignUp = async (provider: 'google' | 'apple') => {
+    try {
+      const result = await socialSignIn(provider);
+      if (result.success) {
+        // Navigate to main app on successful sign up
+        router.replace('/(tabs)');
+      } else {
+        setError('root', {
+          type: 'manual',
+          message: result.error || 'Social sign up failed',
+        });
+      }
+    } catch (error) {
+      console.error('Social sign up error:', error);
+      setError('root', {
+        type: 'manual',
+        message: 'An unexpected error occurred',
+      });
+    }
   };
 
   /**
@@ -207,6 +235,28 @@ export default function SignUpScreen() {
               loading={isLoading}
             />
 
+            {/* Separator */}
+            <View style={styles.separator}>
+              <View style={styles.separatorLine} />
+              <Text style={styles.separatorText}>or</Text>
+              <View style={styles.separatorLine} />
+            </View>
+
+            {/* Social Sign Up Buttons */}
+            <View style={styles.socialButtonsContainer}>
+              <SocialButton
+                provider="google"
+                onPress={() => handleSocialSignUp('google')}
+                disabled={isLoading}
+              />
+              
+              <SocialButton
+                provider="apple"
+                onPress={() => handleSocialSignUp('apple')}
+                disabled={isLoading}
+              />
+            </View>
+
             {/* Terms and Conditions */}
             <View style={styles.termsContainer}>
               <Text style={styles.termsText}>
@@ -284,6 +334,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FF3B30',
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  separator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E5E7',
+  },
+  separatorText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginHorizontal: 16,
+  },
+  socialButtonsContainer: {
+    gap: 12,
     marginBottom: 16,
   },
   termsContainer: {

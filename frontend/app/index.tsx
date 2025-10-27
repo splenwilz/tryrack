@@ -1,53 +1,63 @@
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useEffect } from 'react';
-import { useOnboarding } from '@/hooks/use-onboarding';
-import OnboardingScreenComponent from './onboarding';
+import { useAuth } from '@/contexts/AuthContext';
+import { useUserType } from '@/contexts/UserTypeContext';
 import { router } from 'expo-router';
 
 /**
  * Root Index Component
- * Handles initial app navigation based on onboarding status
+ * Handles initial app navigation based on authentication, onboarding, and user type
  * 
  * Features:
- * - Shows loading screen while checking onboarding status
- * - Redirects to onboarding if not completed
- * - Redirects to main app if onboarding is completed
+ * - Shows loading screen while checking authentication and user type status
+ * - Redirects to sign-in if not authenticated
+ * - Redirects to onboarding if authenticated but onboarding not completed
+ * - Redirects to appropriate app layout based on user type (individual vs boutique)
  * - Handles navigation state management
  */
 export default function Index() {
-  const { isLoading, hasCompletedOnboarding } = useOnboarding();
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { isLoading: userTypeLoading, isOnboardingComplete, userType } = useUserType();
 
-  // Handle navigation when onboarding status changes
+  const isLoading = authLoading || userTypeLoading;
+
+  // Handle navigation based on authentication, onboarding, profile completion, and user type
   useEffect(() => {
-    if (!isLoading && hasCompletedOnboarding) {
-      router.replace('/(tabs)');
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        // User not authenticated, go to sign-in
+        router.replace('/auth/sign-in');
+      } else if (!isOnboardingComplete) {
+        // User authenticated but onboarding not completed, go to onboarding
+        router.replace('/onboarding');
+      // Profile completion is now optional - users can access it from settings
+      // } else if (user && !user.profile_completed) {
+      //   router.replace('/profile-completion');
+      } else if (userType === 'individual') {
+        // Individual user, go to individual tabs
+        router.replace('/(tabs)');
+      } else if (userType === 'boutique') {
+        // Boutique user, go to boutique tabs - dashboard is initial route
+        router.replace('/(boutique-tabs)/dashboard');
+      }
     }
-  }, [isLoading, hasCompletedOnboarding]);
+  }, [isLoading, isAuthenticated, isOnboardingComplete, userType]);
 
-  // Show loading screen while checking onboarding status
+  // Show loading screen while checking status
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.container}>
         <ActivityIndicator size="large" color="#007AFF" />
       </View>
     );
   }
 
-  // If onboarding is completed, show loading while navigating
-  if (hasCompletedOnboarding) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
-  }
-
-  // Show onboarding screen
-  return <OnboardingScreenComponent />;
+  // This component doesn't render anything as it only handles navigation
+  return null;
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
+  container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',

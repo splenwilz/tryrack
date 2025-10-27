@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 
 
 class UserBase(BaseModel):
@@ -35,6 +35,13 @@ class UserInDB(UserBase):
     is_superuser: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
+    user_type: Optional[str] = None  # 'individual' or 'boutique'
+    profile_completed: Optional[bool] = False
+    gender: Optional[str] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None
+    full_body_image_url: Optional[str] = None
+    clothing_sizes: Optional[Dict[str, str]] = None  # Flexible JSON for gender-specific sizes
     
     class Config:
         from_attributes = True
@@ -54,3 +61,13 @@ class Token(BaseModel):
 class TokenPayload(BaseModel):
     """Token payload schema."""
     sub: Optional[int] = None
+
+
+class ProfileCompletion(BaseModel):
+    """Schema for user profile completion."""
+    gender: Optional[str] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None
+    clothing_sizes: Optional[Dict[str, str]] = None  # {"shoe": "10", "shirt": "M", "pants": "32x30"} etc.
+    profile_picture_url: Optional[str] = None
+    full_body_image_url: Optional[str] = None

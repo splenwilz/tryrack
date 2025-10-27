@@ -1,6 +1,13 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, Enum as SQLEnum, JSON
 from sqlalchemy.sql import func
 from app.db import Base
+import enum
+
+
+class UserType(enum.Enum):
+    """User type enumeration."""
+    INDIVIDUAL = "individual"
+    BOUTIQUE = "boutique"
 
 
 class User(Base):
@@ -29,3 +36,18 @@ class User(Base):
     is_superuser = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # User type for switching between individual and boutique modes
+    user_type = Column(SQLEnum(UserType), nullable=True, default=UserType.INDIVIDUAL)
+    
+    # Profile completion fields
+    profile_completed = Column(Boolean, default=False, nullable=False)
+    gender = Column(String(10), nullable=True)  # 'male' or 'female'
+    height = Column(Float, nullable=True)  # in cm
+    weight = Column(Float, nullable=True)  # in kg
+    full_body_image_url = Column(String(500), nullable=True)  # For virtual try-on
+    
+    # Clothing sizes stored as JSON for flexibility
+    # Format: {"shoe": "10", "shirt": "M", "jacket": "40", "pants": "32x30"} for male
+    # Format: {"shoe": "7", "top": "M", "dress": "8", "pants": "28x30", "bra": "34C"} for female
+    clothing_sizes = Column(JSON, nullable=True)

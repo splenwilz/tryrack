@@ -380,6 +380,13 @@ def generate_recommendations(user_id, context):
 
 # 14. Next deliverables I can produce right away (choose any)
 
+
+# 15. Let Users tryout cloth on different colors.
+
+# 16. Let Users track their used clothes -> dirty cloths, notify to ask if it has been washed to add back to clothes that is ready to be used.
+
+# We want boutique to be able to save customer, so that can always reuse the user image
+
 * API contract document (OpenAPI / Swagger) for all endpoints above.
 * Sequence diagram (SVG) showing full try workflow including background-clean job and async try-on.
 * Minimal backend repo skeleton (Express + Python recommender microservice) with example endpoints and mock responses.
