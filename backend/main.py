@@ -3,6 +3,7 @@ from app.api import router as api_router
 from app.api.users import router as users_router
 from app.api.oauth import router as oauth_router
 from app.api.auth import router as auth_router
+from app.api.wardrobe import router as wardrobe_router
 from app.core.config import settings
 
 app = create_app()
@@ -12,6 +13,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(users_router, prefix=settings.API_V1_STR)
 app.include_router(oauth_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(wardrobe_router, prefix=settings.API_V1_STR)
 
 
 if __name__ == "__main__":

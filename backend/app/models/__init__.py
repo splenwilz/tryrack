@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, Enum as SQLEnum, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, Enum as SQLEnum, JSON, ForeignKey
 from sqlalchemy.sql import func
 from app.db import Base
 import enum
@@ -51,3 +51,51 @@ class User(Base):
     # Format: {"shoe": "10", "shirt": "M", "jacket": "40", "pants": "32x30"} for male
     # Format: {"shoe": "7", "top": "M", "dress": "8", "pants": "28x30", "bra": "34C"} for female
     clothing_sizes = Column(JSON, nullable=True)
+
+
+class ItemStatus(enum.Enum):
+    """Item status enumeration."""
+    CLEAN = "clean"
+    WORN = "worn"
+    DIRTY = "dirty"
+
+
+class WardrobeItem(Base):
+    """WardrobeItem model for user wardrobe."""
+    
+    __tablename__ = "wardrobe_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Item details
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(50), nullable=False, index=True)  # top, bottom, shoes, dress, outerwear, accessories, underwear
+    colors = Column(JSON, nullable=True)  # Array of color strings
+    sizes = Column(JSON, nullable=True)  # Array of size strings
+    tags = Column(JSON, nullable=True)  # Array of tag strings
+    
+    # Image URLs
+    image_original = Column(String(500), nullable=True)
+    image_clean = Column(String(500), nullable=True)
+    
+    # Status management
+    status = Column(SQLEnum(ItemStatus), nullable=False, default=ItemStatus.CLEAN, index=True)
+    
+    # Additional metadata
+    formality = Column(Float, nullable=True)  # 0.0 to 1.0
+    season = Column(JSON, nullable=True)  # Array of season strings
+    price = Column(Float, nullable=True)  # Optional price
+    
+    # Embedding for recommendation engine (future use)
+    embedding_id = Column(String(255), nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Index for common queries
+    __table_args__ = (
+        {'comment': 'User wardrobe items for virtual try-on and recommendations'}
+    )

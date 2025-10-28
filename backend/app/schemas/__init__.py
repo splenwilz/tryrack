@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 
 class UserBase(BaseModel):
@@ -71,3 +71,65 @@ class ProfileCompletion(BaseModel):
     clothing_sizes: Optional[Dict[str, str]] = None  # {"shoe": "10", "shirt": "M", "pants": "32x30"} etc.
     profile_picture_url: Optional[str] = None
     full_body_image_url: Optional[str] = None
+
+
+# Wardrobe schemas
+class WardrobeItemBase(BaseModel):
+    """Base wardrobe item schema."""
+    title: str
+    description: Optional[str] = None
+    category: str  # top, bottom, shoes, dress, outerwear, accessories, underwear
+    colors: Optional[List[str]] = None
+    sizes: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    price: Optional[float] = None
+    formality: Optional[float] = None
+    season: Optional[List[str]] = None
+
+
+class WardrobeItemCreate(WardrobeItemBase):
+    """Schema for creating a wardrobe item."""
+    image_original: Optional[str] = None
+    image_clean: Optional[str] = None
+
+
+class WardrobeItemUpdate(BaseModel):
+    """Schema for updating a wardrobe item."""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    colors: Optional[List[str]] = None
+    sizes: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    price: Optional[float] = None
+    formality: Optional[float] = None
+    season: Optional[List[str]] = None
+    image_original: Optional[str] = None
+    image_clean: Optional[str] = None
+    status: Optional[str] = None  # 'clean', 'worn', 'dirty'
+
+
+class WardrobeItemResponse(WardrobeItemBase):
+    """Schema for wardrobe item response."""
+    id: int
+    user_id: int
+    image_original: Optional[str] = None
+    image_clean: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+    
+    @staticmethod
+    def get_json_encoders():
+        """Custom JSON encoder to convert enum to lowercase string."""
+        return {
+            type: lambda v: v.value.lower() if hasattr(v, 'value') else str(v).lower()
+        }
+
+
+class WardrobeItemStatusUpdate(BaseModel):
+    """Schema for updating wardrobe item status."""
+    status: str  # 'clean', 'worn', 'dirty'

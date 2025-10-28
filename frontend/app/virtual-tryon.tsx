@@ -6,6 +6,7 @@ import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useState, useEffect } from 'react';
+import { useUser } from '@/hooks/useAuthQuery';
 
 // Boutique item interface (same as in other files)
 interface BoutiqueItem {
@@ -23,6 +24,16 @@ interface BoutiqueItem {
     logo: string;
   };
   arAvailable: boolean;
+}
+
+// Wardrobe item interface
+interface WardrobeItemTryOn {
+  id: string;
+  title: string;
+  category: string;
+  imageUrl: string;
+  colors: string[];
+  tags: string[];
 }
 
 // Mock boutique data (same as in explore.tsx)
@@ -136,29 +147,60 @@ export default function VirtualTryOnScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const iconColor = useThemeColor({}, 'icon');
-  const { itemId } = useLocalSearchParams<{ itemId: string }>();
+  const { itemId, itemType, itemData } = useLocalSearchParams<{ itemId: string; itemType?: string; itemData?: string }>();
   
-  const [selectedItem, setSelectedItem] = useState<BoutiqueItem | null>(null);
+  // Get current user to check for existing full body photo
+  const { data: user } = useUser();
+  
+  const [selectedItem, setSelectedItem] = useState<BoutiqueItem | WardrobeItemTryOn | null>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
+  const [showPhotoOptions, setShowPhotoOptions] = useState(true);
+  const [hasUsedExistingPhoto, setHasUsedExistingPhoto] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
 
   // Find the selected item
   useEffect(() => {
-    if (itemId) {
+    if (itemType === 'wardrobe' && itemData) {
+      // Parse wardrobe item data
+      try {
+        const parsedData = JSON.parse(itemData);
+        setSelectedItem(parsedData);
+      } catch (error) {
+        console.error('Error parsing wardrobe item data:', error);
+      }
+    } else if (itemId) {
+      // Find boutique item from mock data
       const item = mockBoutiqueData.find(item => item.id === itemId);
       setSelectedItem(item || null);
     }
-  }, [itemId]);
+  }, [itemId, itemType, itemData]);
+
+  // Initialize user photo from profile if available
+  useEffect(() => {
+    if (user?.full_body_image_url && !hasUsedExistingPhoto) {
+      setUserPhoto(user.full_body_image_url);
+      setShowPhotoOptions(true); // Show options to use or replace
+    } else if (!user?.full_body_image_url) {
+      setShowPhotoOptions(false); // Just show the add photo button
+    }
+  }, [user, hasUsedExistingPhoto]);
 
   const handleBackPress = () => {
     router.back();
   };
 
-  const handleSelectPhoto = () => {
+  const handleUseExistingPhoto = () => {
+    setHasUsedExistingPhoto(true);
+    setShowPhotoOptions(false);
+    // Photo is already set in state
+    Alert.alert('Photo Ready', 'Using your existing full body photo for virtual try-on');
+  };
+
+  const handleSelectNewPhoto = () => {
     Alert.alert(
-      'Select Photo',
-      'Choose how you\'d like to add your photo for virtual try-on',
+      'Select New Photo',
+      'Choose how you\'d like to upload a new photo',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -168,6 +210,8 @@ export default function VirtualTryOnScreen() {
             console.log('Opening camera...');
             setTimeout(() => {
               setUserPhoto('https://images.unsplash.com/photo-1494790108755-2616b612b786?w=400&h=600&fit=crop');
+              setHasUsedExistingPhoto(true);
+              setShowPhotoOptions(false);
               Alert.alert('Photo Taken', 'Photo captured successfully!');
             }, 1000);
           }
@@ -179,12 +223,38 @@ export default function VirtualTryOnScreen() {
             console.log('Opening gallery...');
             setTimeout(() => {
               setUserPhoto('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop');
+              setHasUsedExistingPhoto(true);
+              setShowPhotoOptions(false);
               Alert.alert('Photo Selected', 'Photo selected from gallery!');
             }, 1000);
           }
         }
       ]
     );
+  };
+
+  const handleSelectPhoto = () => {
+    if (user?.full_body_image_url && !hasUsedExistingPhoto) {
+      // Show option to use existing or upload new
+      Alert.alert(
+        'Select Photo',
+        'You have a saved full body photo. Would you like to use it or upload a new one?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Use Existing Photo', 
+            onPress: handleUseExistingPhoto
+          },
+          { 
+            text: 'Upload New Photo', 
+            onPress: handleSelectNewPhoto
+          }
+        ]
+      );
+    } else {
+      // No existing photo, go directly to upload
+      handleSelectNewPhoto();
+    }
   };
 
   const handleGenerateTryOn = async () => {
@@ -199,7 +269,8 @@ export default function VirtualTryOnScreen() {
       // TODO: Implement Gemini API integration
       // This will use Gemini's image generation to combine user photo with product
       console.log('Generating virtual try-on with Gemini API...');
-      console.log('Selected item:', selectedItem.title);
+      console.log('Selected item:', selectedItem);
+      console.log('Item type:', itemType || 'boutique');
       console.log('User photo:', userPhoto);
       
       // Simulate API call with progress updates
@@ -253,13 +324,25 @@ export default function VirtualTryOnScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Product Information */}
         <View style={styles.productSection}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>Product</ThemedText>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>{itemType === 'wardrobe' ? 'Your Item' : 'Product'}</ThemedText>
           <View style={[styles.productCard, { backgroundColor }]}>
             <Image source={{ uri: selectedItem.imageUrl }} style={styles.productImage} />
             <View style={styles.productInfo}>
-              <ThemedText style={styles.brandName}>{selectedItem.brand}</ThemedText>
+              {'brand' in selectedItem && <ThemedText style={styles.brandName}>{selectedItem.brand}</ThemedText>}
               <ThemedText style={styles.productTitle}>{selectedItem.title}</ThemedText>
-              <ThemedText style={styles.price}>₦{selectedItem.price.toLocaleString()}</ThemedText>
+              {'price' in selectedItem && <ThemedText style={styles.price}>₦{selectedItem.price.toLocaleString()}</ThemedText>}
+              {'colors' in selectedItem && selectedItem.colors && (
+                <View style={styles.colorsContainer}>
+                  <ThemedText style={styles.colorsLabel}>Colors:</ThemedText>
+                  <View style={styles.colorsList}>
+                    {selectedItem.colors.map((color: string) => (
+                      <View key={color} style={[styles.colorChip, { backgroundColor: tintColor }]}>
+                        <ThemedText style={styles.colorText}>{color}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -267,18 +350,63 @@ export default function VirtualTryOnScreen() {
         {/* User Photo Section */}
         <View style={styles.photoSection}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>Your Photo</ThemedText>
-          <TouchableOpacity style={[styles.photoButton, { backgroundColor }]} onPress={handleSelectPhoto}>
-            {userPhoto ? (
+          
+          {/* Show existing full body photo with option to use or replace */}
+          {user?.full_body_image_url && userPhoto === user.full_body_image_url && !hasUsedExistingPhoto && (
+            <View style={styles.existingPhotoContainer}>
+              <View style={[styles.photoCard, { backgroundColor }]}>
+                <Image source={{ uri: userPhoto }} style={styles.existingPhoto} />
+                <View style={styles.existingPhotoInfo}>
+                  <ThemedText style={styles.existingPhotoTitle}>Use your saved full body photo?</ThemedText>
+                  <ThemedText style={styles.existingPhotoSubtext}>
+                    We found your existing full body photo. You can use it or upload a new one.
+                  </ThemedText>
+                  <View style={styles.photoActionButtons}>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, { backgroundColor: `${tintColor}22` }]}
+                      onPress={handleUseExistingPhoto}
+                    >
+                      <IconSymbol name="checkmark.circle.fill" size={16} color={tintColor} />
+                      <ThemedText style={[styles.actionButtonText, { color: tintColor }]}>
+                        Use This Photo
+                      </ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, { backgroundColor: `${tintColor}22` }]}
+                      onPress={handleSelectNewPhoto}
+                    >
+                      <IconSymbol name="camera.fill" size={16} color={tintColor} />
+                      <ThemedText style={[styles.actionButtonText, { color: tintColor }]}>
+                        Upload New
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Show selected photo */}
+          {userPhoto && hasUsedExistingPhoto && (
+            <TouchableOpacity style={[styles.photoButton, { backgroundColor }]} onPress={handleSelectPhoto}>
               <View style={styles.photoContainer}>
                 <Image source={{ uri: userPhoto }} style={styles.userPhoto} />
                 <TouchableOpacity 
                   style={styles.removePhotoButton} 
-                  onPress={() => setUserPhoto(null)}
+                  onPress={() => {
+                    setUserPhoto(null);
+                    setHasUsedExistingPhoto(false);
+                  }}
                 >
                   <IconSymbol name="plus" size={16} color="white" style={{ transform: [{ rotate: '45deg' }] }} />
                 </TouchableOpacity>
               </View>
-            ) : (
+            </TouchableOpacity>
+          )}
+
+          {/* Show add photo button if no photo selected */}
+          {!userPhoto && !user?.full_body_image_url && (
+            <TouchableOpacity style={[styles.photoButton, { backgroundColor }]} onPress={handleSelectPhoto}>
               <View style={styles.photoPlaceholder}>
                 <IconSymbol name="plus" size={32} color={iconColor} />
                 <ThemedText style={styles.photoPlaceholderText}>Add Your Photo</ThemedText>
@@ -286,8 +414,8 @@ export default function VirtualTryOnScreen() {
                   Take a photo or choose from gallery
                 </ThemedText>
               </View>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Generate Button */}
@@ -576,5 +704,78 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
+  },
+  colorsContainer: {
+    marginTop: 8,
+  },
+  colorsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    opacity: 0.7,
+  },
+  colorsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  colorChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  colorText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'white',
+  },
+  existingPhotoContainer: {
+    marginBottom: 16,
+  },
+  photoCard: {
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  existingPhoto: {
+    width: '100%',
+    height: 300,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  existingPhotoInfo: {
+    paddingHorizontal: 4,
+  },
+  existingPhotoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  existingPhotoSubtext: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  photoActionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

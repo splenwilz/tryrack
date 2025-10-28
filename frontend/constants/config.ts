@@ -11,10 +11,7 @@ export const API_CONFIG = {
   // Backend API base URL
   // In development, use the same IP as Expo dev server
   // In production, use your deployed backend URL
-  BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL || (__DEV__ 
-    ? 'https://18e141592e50.ngrok-free.app'  // Development - use ngrok tunnel
-    : 'https://tryrack.tasknify.com'),  // Production - replace with your domain
-  
+  BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL, 
   // API version prefix
   API_VERSION: '/api/v1',
   
