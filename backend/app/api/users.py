@@ -9,6 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.db import get_db
+from app.core.auth import get_current_user_id
 from app.schemas import User, UserCreate, UserUpdate, ProfileCompletion
 from app.services import (
     get_user,
@@ -19,7 +20,11 @@ from app.services import (
     delete_user,
 )
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(
+    prefix="/users",
+    tags=["users"],
+    dependencies=[Depends(get_current_user_id)],
+)
 
 
 @router.get("/", response_model=List[User])
