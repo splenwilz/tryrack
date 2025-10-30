@@ -34,8 +34,8 @@ export default function WardrobeScreenWithAPI() {
   const tintColor = useThemeColor({}, 'tint');
   
   // Get current user
-  const { data: user } = useUser();
-  const userId = user?.id || 1;
+  const { data: user, isLoading: isUserLoading } = useUser();
+  const userId = user?.id ?? 0;
   
   // Fetch wardrobe items from API
   const { data: apiItems = [], isLoading, error } = useWardrobeItems(userId);
@@ -46,7 +46,7 @@ export default function WardrobeScreenWithAPI() {
     id: item.id.toString(),
     title: item.title,
     category: item.category,
-    imageUrl: item.image_original || item.image_clean || 'https://via.placeholder.com/150',
+    imageUrl: item.image_clean || item.image_original || 'https://via.placeholder.com/150',
     colors: item.colors || [],
     tags: item.tags || [],
     status: item.status,
@@ -69,7 +69,7 @@ export default function WardrobeScreenWithAPI() {
   };
   
   // Show loading state
-  if (isLoading) {
+  if (isUserLoading || userId === 0 || isLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader title="My Wardrobe" />
@@ -160,8 +160,8 @@ export default function WardrobeScreenWithAPI() {
               <ThemedText style={styles.itemCategory}>{item.category}</ThemedText>
               {item.tags && item.tags.length > 0 && (
                 <View style={styles.tags}>
-                  {item.tags.slice(0, 2).map((tag, idx) => (
-                    <ThemedText key={idx} style={styles.tag}>#{tag}</ThemedText>
+                  {item.tags.slice(0, 2).map((tag) => (
+                    <ThemedText key={tag} style={styles.tag}>#{tag}</ThemedText>
                   ))}
                 </View>
               )}

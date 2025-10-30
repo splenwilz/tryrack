@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScrollView, StyleSheet, View, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
@@ -8,9 +8,10 @@ import { CustomHeader } from '@/components/home/CustomHeader';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { useCreateWardrobeItem, useUpdateWardrobeItem, useWardrobeItem } from '@/hooks/useWardrobe';
+import { useCreateWardrobeItem, useUpdateWardrobeItem, useWardrobeItem, useWardrobeItemWithPolling, useProcessImage, useDeleteWardrobeItem } from '@/hooks/useWardrobe';
 import { useUser } from '@/hooks/useAuthQuery';
 import { useLocalSearchParams } from 'expo-router';
+import { ShimmerPlaceholder } from '@/components/ShimmerPlaceholder';
 
 interface WardrobeItemForm {
   title: string;
@@ -18,6 +19,18 @@ interface WardrobeItemForm {
   colors: string[];
   tags: string[];
   imageUrl: string | null;
+}
+
+/**
+ * AI Processing Stages
+ * Each stage has its own Lottie animation and message
+ */
+type ProcessingStage = 'uploading' | 'analyzing' | 'enhancing' | 'extracting' | 'complete' | null;
+
+interface ProcessingStageConfig {
+  message: string;
+  lottieSource: any; // Will be require() path
+  duration: number; // Expected duration in ms
 }
 
 const categories = [
@@ -35,6 +48,38 @@ const commonColors = [
   'red', 'blue', 'green', 'yellow', 'pink', 'purple', 'orange'
 ];
 
+/**
+ * Processing stage configurations
+ * Maps each stage to its message and expected duration
+ */
+const processingStageConfig: Record<Exclude<ProcessingStage, null>, ProcessingStageConfig> = {
+  uploading: {
+    message: 'Uploading image...',
+    lottieSource: require('@/assets/images/partial-react-logo.png'), // Placeholder - will use simple animation
+    duration: 1000,
+  },
+  analyzing: {
+    message: 'AI analyzing your item...',
+    lottieSource: require('@/assets/images/partial-react-logo.png'),
+    duration: 4000,
+  },
+  enhancing: {
+    message: 'Enhancing background...',
+    lottieSource: require('@/assets/images/partial-react-logo.png'),
+    duration: 3000,
+  },
+  extracting: {
+    message: 'Extracting colors & details...',
+    lottieSource: require('@/assets/images/partial-react-logo.png'),
+    duration: 2000,
+  },
+  complete: {
+    message: '✓ Ready!',
+    lottieSource: require('@/assets/images/partial-react-logo.png'),
+    duration: 500,
+  },
+};
+
 // Helper function to convert image URI to base64 (same as profile completion)
 const convertImageToBase64 = async (imageUri: string): Promise<string> => {
   console.log('🔄 Converting image to base64:', imageUri.substring(0, 50));
@@ -51,10 +96,10 @@ const convertImageToBase64 = async (imageUri: string): Promise<string> => {
     console.log('🔄 Converting with ImageManipulator...');
     const readStart = Date.now();
     
-    const { base64, uri: newUri } = await ImageManipulator.manipulateAsync(
+    const { base64 } = await ImageManipulator.manipulateAsync(
       imageUri,
-      [], // No manipulations needed, just conversion
-      { compress: 0.5, base64: true }
+      [{ resize: { width: 800 } }], // Resize to 800px max width for faster AI processing
+      { compress: 0.7, base64: true, format: ImageManipulator.SaveFormat.JPEG }
     );
     
     console.log(`⏱️ Conversion took: ${Date.now() - readStart}ms`);
@@ -88,6 +133,8 @@ export default function AddItemScreen() {
   const { data: user } = useUser();
   const createMutation = useCreateWardrobeItem();
   const updateMutation = useUpdateWardrobeItem();
+  const deleteMutation = useDeleteWardrobeItem();  // 🗑️ For cleanup
+  const processImageMutation = useProcessImage();  // 🎨 NEW
   
   // Check if we're in edit mode
   const params = useLocalSearchParams<{ itemId?: string }>();
@@ -109,6 +156,51 @@ export default function AddItemScreen() {
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [customTag, setCustomTag] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  
+  // 🎨 NEW: AI Processing state (processes BEFORE save)
+  const [processingId, setProcessingId] = useState<number | null>(null);
+  const [showAISuggestions, setShowAISuggestions] = useState(false);
+  const [isProcessingLocally, setIsProcessingLocally] = useState(false); // 🎨 Immediate UI feedback
+  const [processingStage, setProcessingStage] = useState<ProcessingStage>(null); // 🎨 Current AI stage
+  const [showShimmer, setShowShimmer] = useState(false); // 🎨 Control shimmer visibility
+  
+  // 🎨 Poll for AI processing updates immediately after image upload
+  const { data: processingItem } = useWardrobeItemWithPolling(
+    processingId || 0,
+    user?.id || 0
+  );
+  
+  // 🎨 Auto-progress through processing stages based on backend status
+  useEffect(() => {
+    if (!isProcessingLocally) return;
+    
+    // Map backend status to frontend stage
+    const backendStatus = processingItem?.processing_status;
+    
+    if (backendStatus === 'pending') {
+      setProcessingStage('uploading');
+      setShowShimmer(true);
+    } else if (backendStatus === 'processing') {
+      // Cycle through analyzing → enhancing → extracting while backend processes
+      const processingStages: Exclude<ProcessingStage, 'uploading' | 'complete' | null>[] = [
+        'analyzing',
+        'enhancing', 
+        'extracting',
+      ];
+      
+      let currentIndex = 0;
+      setProcessingStage(processingStages[0]);
+      setShowShimmer(true);
+      
+      const cycleInterval = setInterval(() => {
+        currentIndex = (currentIndex + 1) % processingStages.length;
+        setProcessingStage(processingStages[currentIndex]);
+        console.log(`🎨 DEBUG: Cycling stage: ${processingStages[currentIndex]}`);
+      }, 5000); // Change stage every 5s while processing
+      
+      return () => clearInterval(cycleInterval);
+    }
+  }, [isProcessingLocally, processingItem?.processing_status]);
   
   // Load existing item data when editing
   React.useEffect(() => {
@@ -140,6 +232,153 @@ export default function AddItemScreen() {
     }
   }, [isEditMode, existingItem]);
 
+  // 🎨 Auto-fill AI suggestions when processing completes (NEW: flexible categories)
+  React.useEffect(() => {
+    // ✅ GUARD: Only process if this is the CURRENT processing item (not an old one)
+    if (!processingId || processingItem?.id !== processingId) {
+      return;
+    }
+    
+    if (processingItem?.processing_status === 'completed' && processingItem.ai_suggestions) {
+      console.log('🎨 DEBUG: AI suggestions received for item', processingItem.id, ':', processingItem.ai_suggestions);
+      
+      // Only auto-fill if form is still empty
+      const isFormEmpty = !formData.title && selectedColors.length === 0 && selectedTags.length === 0;
+      
+      if (isFormEmpty) {
+        const suggestions = processingItem.ai_suggestions;
+        
+        // 🎨 Use Gemini's flexible category directly
+        setFormData(prev => ({
+          ...prev,
+          title: suggestions.title,
+          category: suggestions.category,  // e.g., "denim jacket", "chinos", "sneaker"
+          colors: suggestions.colors,
+          tags: suggestions.tags,
+        }));
+        
+        // Show category in text input
+        setSelectedCategory(suggestions.category);
+        setSelectedColors(suggestions.colors);
+        setSelectedTags(suggestions.tags);
+        setShowAISuggestions(true);
+        
+        console.log('🎨 DEBUG: Form auto-filled with category:', suggestions.category);
+      }
+      
+      // Update the displayed image to the cleaned version
+      if (processingItem.image_clean) {
+        console.log('🎨 DEBUG: Updating to cleaned image:', processingItem.image_clean);
+        setFormData(prev => ({
+          ...prev,
+          imageUrl: processingItem.image_clean || prev.imageUrl,
+        }));
+      }
+      
+      // 🎨 Show completion stage briefly, then turn off
+      setProcessingStage('complete');
+      setTimeout(() => {
+        setIsProcessingLocally(false);
+        setShowShimmer(false);
+        setProcessingStage(null);
+      }, processingStageConfig.complete.duration);
+    }
+  }, [processingId, processingItem?.id, processingItem?.processing_status, processingItem?.ai_suggestions, processingItem?.image_clean, formData.title, selectedColors.length, selectedTags.length]);
+
+  // 🗑️ Helper: Remove photo and reset all state
+  const handleRemovePhoto = () => {
+    console.log('🗑️ DEBUG: Removing photo and resetting form');
+    
+    // 🛑 Stop all processing
+    setProcessingId(null);
+    setIsProcessingLocally(false);
+    setShowShimmer(false);
+    setProcessingStage(null);
+    setShowAISuggestions(false);
+    
+    // 🧹 Clear all form data
+    setFormData({
+      title: '',
+      category: '',
+      imageUrl: null,
+      colors: [],
+      tags: [],
+    });
+    setSelectedColors([]);
+    setSelectedTags([]);
+    setSelectedCategory('');
+    
+    console.log('✅ DEBUG: Photo removed, form reset complete');
+  };
+
+  // 🎨 Helper: Process image immediately after selection
+  const processImageImmediately = async (imageUri: string) => {
+    // Guard: Prevent duplicate processing
+    if (isProcessingLocally) {
+      console.log('🎨 DEBUG: Already processing, skipping duplicate call');
+      return;
+    }
+    
+    try {
+      console.log('🎨 DEBUG: Processing image immediately:', imageUri);
+      
+      // 🎨 Show processing indicator IMMEDIATELY (before any async operations)
+      setIsProcessingLocally(true);
+      setShowShimmer(true);
+      setProcessingStage('uploading');
+      setShowAISuggestions(false); // 🧹 Clear AI suggestions badge
+      
+      // 🧹 Clear previous form data AND set new image immediately
+      setFormData({
+        title: '',
+        category: '',
+        imageUrl: imageUri, // ✅ Show new image immediately
+        colors: [],
+        tags: [],
+      });
+      setSelectedColors([]);
+      setSelectedTags([]);
+      setSelectedCategory('');
+      
+      console.log('🎨 DEBUG: New image set, form cleared');
+      
+      // Convert to base64
+      console.log('🎨 DEBUG: Starting image conversion...');
+      const imageData = await convertImageToBase64(imageUri);
+      console.log('🎨 DEBUG: Image conversion complete');
+      
+      if (!imageData) {
+        throw new Error('Failed to convert image to base64');
+      }
+      
+      // Send to backend for AI processing
+      if (user?.id) {
+        console.log('🎨 DEBUG: Sending to backend for AI processing');
+        const result = await processImageMutation.mutateAsync({
+          userId: user.id,
+          image: imageData,
+        });
+        
+        console.log('🎨 DEBUG: Processing started with ID:', result.processing_id);
+        setProcessingId(result.processing_id);  // Start polling
+        // Keep isProcessingLocally true - will turn off when AI completes
+      }
+    } catch (error) {
+      console.error('🎨 ERROR: Failed to process image:', error);
+      console.error('🎨 ERROR: Error type:', error instanceof Error ? error.message : String(error));
+      setIsProcessingLocally(false);
+      setShowShimmer(false);
+      setProcessingStage(null);
+      
+      // Show error to user
+      Alert.alert(
+        'Processing Error', 
+        'Failed to process image with AI. You can still add the item manually.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const handleImageUpload = async () => {
     Alert.alert(
       'Add Item Photo',
@@ -157,13 +396,13 @@ export default function AddItemScreen() {
 
             const result = await ImagePicker.launchCameraAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 0.8,
+              allowsEditing: false, // No editing - preserve original aspect ratio
+              quality: 1, // Maximum quality
             });
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
-              setFormData({ ...formData, imageUrl: result.assets[0].uri });
+              // 🎨 NEW: Process immediately
+              await processImageImmediately(result.assets[0].uri);
             }
           },
         },
@@ -178,13 +417,13 @@ export default function AddItemScreen() {
 
             const result = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 0.8,
+              allowsEditing: false, // No editing - preserve original aspect ratio
+              quality: 1, // Maximum quality
             });
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
-              setFormData({ ...formData, imageUrl: result.assets[0].uri });
+              // 🎨 NEW: Process immediately
+              await processImageImmediately(result.assets[0].uri);
             }
           },
         },
@@ -228,18 +467,8 @@ export default function AddItemScreen() {
     }
 
     try {
-      // Map category to match backend schema
-      const categoryMap: Record<string, string> = {
-        'top': 'top',
-        'bottom': 'bottom',
-        'outerwear': 'outerwear',
-        'dress': 'dress',
-        'shoe': 'shoes', // Backend expects 'shoes' not 'shoe'
-        'accessory': 'accessories', // Backend expects 'accessories'
-        'underwear': 'underwear',
-      };
-
-      const backendCategory = categoryMap[selectedCategory] || selectedCategory;
+      // 🎨 Use the selected/AI category directly
+      const backendCategory = selectedCategory || formData.category;
 
       // Convert image to base64 if we have an image
       let imageData = null;
@@ -255,12 +484,8 @@ export default function AddItemScreen() {
 
       console.log('Saving wardrobe item with image data length:', imageData?.length || 0);
 
-      // Determine if we should send image_original (only if it's new/changed)
-      // If imageData is a data URL, send it; if it's an S3 URL, send it; otherwise don't send
-      const shouldUpdateImage = imageData && (
-        imageData.startsWith('data:') || // New base64 image
-        (imageData && !formData.imageUrl?.includes(imageData)) // Changed image
-      );
+      // Only send when we have a new base64 image (data URL)
+      const shouldUpdateImage = typeof imageData === 'string' && imageData.startsWith('data:');
       
       const itemData: any = {
         title: formData.title,
@@ -269,7 +494,7 @@ export default function AddItemScreen() {
         tags: selectedTags,
       };
       
-      // Only send image if it's been changed or is new
+      // Only send image if it's new
       if (shouldUpdateImage) {
         itemData.image_original = imageData;
       }
@@ -288,18 +513,55 @@ export default function AddItemScreen() {
           [{ text: 'OK', onPress: () => router.back() }]
         );
       } else {
-        // Create new item
-        await createMutation.mutateAsync({
+        // 🎨 NEW: Save wardrobe item (image already processed)
+        console.log('🎨 DEBUG: Creating wardrobe item with user data...');
+        
+        // If we have a processingId, use that item's enhanced image
+        let finalImageData = imageData;
+        if (processingId && processingItem?.image_clean) {
+          console.log('🎨 DEBUG: Using AI-enhanced image');
+          // Convert enhanced S3 URL to data URL format expected by backend
+          // Actually, we don't need to - backend will handle S3 URLs
+          finalImageData = imageData; // Keep original for now
+        }
+        
+        const newItem = await createMutation.mutateAsync({
           userId: user.id,
           item: {
             ...itemData,
-            image_original: imageData, // Always send for new items
+            image_original: finalImageData,
           },
         });
         
+        console.log('🎨 DEBUG: Item saved to wardrobe with ID:', newItem.id);
+        
+        // 🗑️ Delete temporary processing item if it exists
+        if (processingId) {
+          try {
+            console.log('🗑️ DEBUG: Stopping polling for temporary item:', processingId);
+            const tempId = processingId;
+            
+            // 🛑 STOP POLLING FIRST - Set processingId to null to disable the polling query
+            setProcessingId(null);
+            
+            // ⏳ Wait a moment for React Query to process the state change
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            console.log('🗑️ DEBUG: Deleting temporary processing item:', tempId);
+            await deleteMutation.mutateAsync({
+              userId: user.id,
+              itemId: tempId,
+            });
+            console.log('🗑️ DEBUG: Temporary item deleted successfully');
+          } catch (deleteError) {
+            console.warn('⚠️ Failed to delete temporary processing item:', deleteError);
+            // Don't block the success flow if cleanup fails
+          }
+        }
+        
         Alert.alert(
-          'Item Added!',
-          'Your wardrobe item has been added successfully.',
+          '✨ Item Added!',
+          'Your wardrobe item has been saved successfully.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
       }
@@ -335,7 +597,7 @@ export default function AddItemScreen() {
   );
 
   // Show loading state when fetching existing item
-  if (isEditMode && isLoadingItem) {
+  if (isEditMode && (!user?.id || isLoadingItem)) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader
@@ -382,10 +644,41 @@ export default function AddItemScreen() {
             )}
           </TouchableOpacity>
           
+          {/* 🎨 AI Processing Section - Lottie + Message (below image, not overlay) */}
+          {isProcessingLocally && processingStage && (
+            <View style={styles.aiProcessingSection}>
+              {/* Simple animated icon (placeholder for Lottie) */}
+              <View style={styles.processingIconContainer}>
+                <ThemedText style={styles.processingIcon}>
+                  {processingStage === 'uploading' && '☁️'}
+                  {processingStage === 'analyzing' && '🤖'}
+                  {processingStage === 'enhancing' && '✨'}
+                  {processingStage === 'extracting' && '🔍'}
+                  {processingStage === 'complete' && '✓'}
+                </ThemedText>
+              </View>
+              
+              {/* Processing Message */}
+              <ThemedText style={[styles.processingMessage, { color: tintColor }]}>
+                {processingStageConfig[processingStage].message}
+              </ThemedText>
+            </View>
+          )}
+          
+          {/* 🤖 AI Suggestions Badge */}
+          {showAISuggestions && (
+            <View style={[styles.aiSuggestionBadge, { backgroundColor: `${tintColor}20`, borderColor: tintColor }]}>
+              <IconSymbol name="sparkles" size={16} color={tintColor} />
+              <ThemedText style={[styles.aiSuggestionText, { color: tintColor }]}>
+                AI suggestions applied
+              </ThemedText>
+            </View>
+          )}
+          
           {formData.imageUrl && (
             <TouchableOpacity
               style={[styles.removeButton, { backgroundColor: tintColor }]}
-              onPress={() => setFormData({ ...formData, imageUrl: null })}
+              onPress={handleRemovePhoto}
             >
               <IconSymbol name="trash.fill" size={16} color="white" />
               <ThemedText style={styles.removeButtonText}>Remove Photo</ThemedText>
@@ -399,21 +692,45 @@ export default function AddItemScreen() {
             Item Details *
           </ThemedText>
           
-          <View style={[styles.inputContainer, { borderColor }]}>
-            <TextInput
-              style={[styles.textInput, { color: textColor }]}
-              placeholder="e.g., White Cotton T-Shirt"
-              placeholderTextColor={borderColor}
-              value={formData.title}
-              onChangeText={(text) => setFormData({ ...formData, title: text })}
-            />
-          </View>
+          {/* 🎨 Show shimmer during processing, real input after */}
+          {showShimmer && !formData.title ? (
+            <ShimmerPlaceholder width="80%" height={48} />
+          ) : (
+            <View style={[styles.inputContainer, { borderColor }]}>
+              <TextInput
+                style={[styles.textInput, { color: textColor }]}
+                placeholder="e.g., White Cotton T-Shirt"
+                placeholderTextColor={borderColor}
+                value={formData.title}
+                onChangeText={(text) => setFormData({ ...formData, title: text })}
+              />
+            </View>
+          )}
         </View>
 
         {/* Category Selection */}
         <View style={[styles.section, { backgroundColor }]}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>
             Category *
+          </ThemedText>
+          
+          {/* 🎨 Show shimmer during processing, real input after */}
+          {showShimmer && !selectedCategory ? (
+            <ShimmerPlaceholder width="60%" height={48} style={{ marginBottom: 12 }} />
+          ) : (
+            <View style={[styles.inputContainer, { borderColor, marginBottom: 12 }]}>
+              <TextInput
+                style={[styles.textInput, { color: textColor }]}
+                placeholder="e.g., denim jacket, cargo pants, sneakers"
+                placeholderTextColor={borderColor}
+                value={selectedCategory}
+                onChangeText={setSelectedCategory}
+              />
+            </View>
+          )}
+          
+          <ThemedText style={[styles.helperText, { color: borderColor, marginBottom: 8 }]}>
+            Or select a quick option:
           </ThemedText>
           
           <View style={styles.categoryGrid}>
@@ -448,9 +765,18 @@ export default function AddItemScreen() {
             Colors
           </ThemedText>
           
-          <View style={styles.colorGrid}>
-            {commonColors.map(renderColorButton)}
-          </View>
+          {/* 🎨 Show shimmer chips during processing */}
+          {showShimmer && selectedColors.length === 0 ? (
+            <View style={styles.shimmerRow}>
+              <ShimmerPlaceholder width={70} height={32} borderRadius={16} />
+              <ShimmerPlaceholder width={90} height={32} borderRadius={16} style={{ marginLeft: 8 }} />
+              <ShimmerPlaceholder width={60} height={32} borderRadius={16} style={{ marginLeft: 8 }} />
+            </View>
+          ) : (
+            <View style={styles.colorGrid}>
+              {commonColors.map(renderColorButton)}
+            </View>
+          )}
         </View>
 
         {/* Tags Section */}
@@ -459,34 +785,46 @@ export default function AddItemScreen() {
             Tags
           </ThemedText>
           
-          <View style={[styles.tagInputContainer, { borderColor }]}>
-            <TextInput
-              style={[styles.tagInput, { color: textColor }]}
-              placeholder="Add a tag (e.g., casual, formal, summer)"
-              placeholderTextColor={borderColor}
-              value={customTag}
-              onChangeText={setCustomTag}
-              onSubmitEditing={handleAddTag}
-            />
-            <TouchableOpacity
-              style={[styles.addTagButton, { backgroundColor: tintColor }]}
-              onPress={handleAddTag}
-            >
-              <IconSymbol name="plus" size={16} color="white" />
-            </TouchableOpacity>
-          </View>
-          
-          {selectedTags.length > 0 && (
-            <View style={styles.tagsContainer}>
-              {selectedTags.map((tag) => (
-                <View key={tag} style={[styles.tagChip, { backgroundColor: `${tintColor}33`, borderColor: tintColor }]}>
-                  <ThemedText style={[styles.tagText, { color: tintColor }]}>{tag}</ThemedText>
-                  <TouchableOpacity onPress={() => handleRemoveTag(tag)}>
-                    <IconSymbol name="xmark.circle.fill" size={16} color={tintColor} />
-                  </TouchableOpacity>
-                </View>
-              ))}
+          {/* 🎨 Show shimmer chips during processing */}
+          {showShimmer && selectedTags.length === 0 ? (
+            <View style={styles.shimmerRow}>
+              <ShimmerPlaceholder width={60} height={30} borderRadius={15} />
+              <ShimmerPlaceholder width={80} height={30} borderRadius={15} style={{ marginLeft: 8 }} />
+              <ShimmerPlaceholder width={70} height={30} borderRadius={15} style={{ marginLeft: 8 }} />
+              <ShimmerPlaceholder width={65} height={30} borderRadius={15} style={{ marginLeft: 8 }} />
             </View>
+          ) : (
+            <>
+              <View style={[styles.tagInputContainer, { borderColor }]}>
+                <TextInput
+                  style={[styles.tagInput, { color: textColor }]}
+                  placeholder="Add a tag (e.g., casual, formal, summer)"
+                  placeholderTextColor={borderColor}
+                  value={customTag}
+                  onChangeText={setCustomTag}
+                  onSubmitEditing={handleAddTag}
+                />
+                <TouchableOpacity
+                  style={[styles.addTagButton, { backgroundColor: tintColor }]}
+                  onPress={handleAddTag}
+                >
+                  <IconSymbol name="plus" size={16} color="white" />
+                </TouchableOpacity>
+              </View>
+              
+              {selectedTags.length > 0 && (
+                <View style={styles.tagsContainer}>
+                  {selectedTags.map((tag) => (
+                    <View key={tag} style={[styles.tagChip, { backgroundColor: `${tintColor}33`, borderColor: tintColor }]}>
+                      <ThemedText style={[styles.tagText, { color: tintColor }]}>{tag}</ThemedText>
+                      <TouchableOpacity onPress={() => handleRemoveTag(tag)}>
+                        <IconSymbol name="xmark.circle.fill" size={16} color={tintColor} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
           )}
         </View>
 
@@ -539,6 +877,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
   },
+  helperText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
   imageUploadButton: {
     width: '100%',
     height: 200,
@@ -573,6 +915,69 @@ const styles = StyleSheet.create({
   removeButtonText: {
     color: 'white',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  // 🤖 AI Processing Styles
+  processingOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingBar: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    opacity: 0.95,
+  },
+  processingText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // 🎨 New AI Processing Section (below image, not overlay)
+  aiProcessingSection: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    gap: 8,
+  },
+  processingIconContainer: {
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingIcon: {
+    fontSize: 32,
+  },
+  processingMessage: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  // 🎨 Shimmer Row for Colors & Tags
+  shimmerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    paddingVertical: 8,
+  },
+  aiSuggestionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  aiSuggestionText: {
+    fontSize: 13,
     fontWeight: '600',
   },
   inputContainer: {

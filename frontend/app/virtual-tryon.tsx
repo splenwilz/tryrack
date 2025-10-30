@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -7,6 +7,9 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { useUser } from '@/hooks/useAuthQuery';
+import { useGenerateVirtualTryOn, useVirtualTryOnResult, convertImageToBase64 } from '@/hooks/useVirtualTryOn';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 // Boutique item interface (same as in other files)
 interface BoutiqueItem {
@@ -154,10 +157,19 @@ export default function VirtualTryOnScreen() {
   
   const [selectedItem, setSelectedItem] = useState<BoutiqueItem | WardrobeItemTryOn | null>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
-  const [showPhotoOptions, setShowPhotoOptions] = useState(true);
   const [hasUsedExistingPhoto, setHasUsedExistingPhoto] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [tryonId, setTryonId] = useState<number | null>(null);
+  const [useCleanBackground, setUseCleanBackground] = useState(false); // Toggle for clean background
+  
+  // API hooks
+  const generateMutation = useGenerateVirtualTryOn();
+  const { data: tryonResult } = useVirtualTryOnResult(
+    tryonId,
+    user?.id ?? 0,
+    tryonId !== null
+  );
 
   // Find the selected item
   useEffect(() => {
@@ -180,11 +192,30 @@ export default function VirtualTryOnScreen() {
   useEffect(() => {
     if (user?.full_body_image_url && !hasUsedExistingPhoto) {
       setUserPhoto(user.full_body_image_url);
-      setShowPhotoOptions(true); // Show options to use or replace
-    } else if (!user?.full_body_image_url) {
-      setShowPhotoOptions(false); // Just show the add photo button
     }
   }, [user, hasUsedExistingPhoto]);
+  
+  // Handle polling result updates
+  useEffect(() => {
+    if (!tryonResult) return;
+    
+    console.log('📊 Try-on status:', tryonResult.status);
+    
+    if (tryonResult.status === 'completed' && tryonResult.result_image_url) {
+      setGeneratedImage(tryonResult.result_image_url);
+      setIsGenerating(false);
+      Alert.alert('Success!', 'Virtual try-on generated successfully!');
+    } else if (tryonResult.status === 'failed') {
+      setIsGenerating(false);
+      Alert.alert(
+        'Generation Failed',
+        tryonResult.error_message || 'Failed to generate virtual try-on. Please try again.'
+      );
+    } else if (tryonResult.status === 'processing') {
+      // Still processing, keep showing loading state
+      setIsGenerating(true);
+    }
+  }, [tryonResult]);
 
   const handleBackPress = () => {
     router.back();
@@ -192,12 +223,11 @@ export default function VirtualTryOnScreen() {
 
   const handleUseExistingPhoto = () => {
     setHasUsedExistingPhoto(true);
-    setShowPhotoOptions(false);
     // Photo is already set in state
     Alert.alert('Photo Ready', 'Using your existing full body photo for virtual try-on');
   };
 
-  const handleSelectNewPhoto = () => {
+  const handleSelectNewPhoto = async () => {
     Alert.alert(
       'Select New Photo',
       'Choose how you\'d like to upload a new photo',
@@ -205,28 +235,71 @@ export default function VirtualTryOnScreen() {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Take Photo', 
-          onPress: () => {
-            // Mock camera functionality - simulate taking a photo
-            console.log('Opening camera...');
-            setTimeout(() => {
-              setUserPhoto('https://images.unsplash.com/photo-1494790108755-2616b612b786?w=400&h=600&fit=crop');
-              setHasUsedExistingPhoto(true);
-              setShowPhotoOptions(false);
-              Alert.alert('Photo Taken', 'Photo captured successfully!');
-            }, 1000);
+          onPress: async () => {
+            try {
+              const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+              
+              if (!permissionResult.granted) {
+                Alert.alert('Permission Required', 'Camera access is needed to take photos');
+                return;
+              }
+              
+              const result = await ImagePicker.launchCameraAsync({
+                quality: 1,
+                base64: false,
+              });
+              
+              if (!result.canceled && result.assets[0]) {
+                // Resize image to reduce size
+                const manipulatedImage = await ImageManipulator.manipulateAsync(
+                  result.assets[0].uri,
+                  [{ resize: { width: 800 } }],
+                  { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+                );
+                
+                setUserPhoto(manipulatedImage.uri);
+                setHasUsedExistingPhoto(true);
+                Alert.alert('Photo Taken', 'Photo captured successfully!');
+              }
+            } catch (error) {
+              console.error('Error taking photo:', error);
+              Alert.alert('Error', 'Failed to take photo');
+            }
           }
         },
         { 
           text: 'Choose from Gallery', 
-          onPress: () => {
-            // Mock gallery functionality - simulate selecting a photo
-            console.log('Opening gallery...');
-            setTimeout(() => {
-              setUserPhoto('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop');
-              setHasUsedExistingPhoto(true);
-              setShowPhotoOptions(false);
-              Alert.alert('Photo Selected', 'Photo selected from gallery!');
-            }, 1000);
+          onPress: async () => {
+            try {
+              const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              
+              if (!permissionResult.granted) {
+                Alert.alert('Permission Required', 'Photo library access is needed');
+                return;
+              }
+              
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 1,
+                base64: false,
+              });
+              
+              if (!result.canceled && result.assets[0]) {
+                // Resize image to reduce size
+                const manipulatedImage = await ImageManipulator.manipulateAsync(
+                  result.assets[0].uri,
+                  [{ resize: { width: 800 } }],
+                  { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+                );
+                
+                setUserPhoto(manipulatedImage.uri);
+                setHasUsedExistingPhoto(true);
+                Alert.alert('Photo Selected', 'Photo selected from gallery!');
+              }
+            } catch (error) {
+              console.error('Error selecting photo:', error);
+              Alert.alert('Error', 'Failed to select photo');
+            }
           }
         }
       ]
@@ -258,7 +331,7 @@ export default function VirtualTryOnScreen() {
   };
 
   const handleGenerateTryOn = async () => {
-    if (!selectedItem || !userPhoto) {
+    if (!selectedItem || !userPhoto || !user?.id) {
       Alert.alert('Missing Information', 'Please select both an item and your photo to generate virtual try-on');
       return;
     }
@@ -266,27 +339,45 @@ export default function VirtualTryOnScreen() {
     setIsGenerating(true);
     
     try {
-      // TODO: Implement Gemini API integration
-      // This will use Gemini's image generation to combine user photo with product
-      console.log('Generating virtual try-on with Gemini API...');
-      console.log('Selected item:', selectedItem);
-      console.log('Item type:', itemType || 'boutique');
-      console.log('User photo:', userPhoto);
+      console.log('🎨 Generating virtual try-on with Gemini API...');
+      console.log('📦 Selected item:', selectedItem.title);
+      console.log('🏷️ Item type:', itemType || 'boutique');
+      console.log('📸 User photo URL:', userPhoto);
       
-      // Simulate API call with progress updates
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Prepare request (no base64 conversion needed!)
+      const request = {
+        user_image_url: userPhoto, // Already an S3 URL!
+        item_image_url: selectedItem.imageUrl,
+        item_details: {
+          category: selectedItem.category,
+          colors: selectedItem.colors || [],
+          type: (itemType || 'boutique') as 'wardrobe' | 'boutique',
+        },
+        use_clean_background: useCleanBackground, // User preference
+      };
       
-      // Mock generated image (replace with actual Gemini API result)
-      // Using a realistic virtual try-on result image
-      setGeneratedImage('https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=600&fit=crop');
+      console.log('🚀 Sending request to backend...');
       
-      Alert.alert('Success!', 'Virtual try-on generated successfully!');
+      // Call API to generate try-on
+      const result = await generateMutation.mutateAsync({
+        userId: user.id,
+        request,
+      });
       
-    } catch (error) {
-      console.error('Error generating virtual try-on:', error);
-      Alert.alert('Error', 'Failed to generate virtual try-on. Please try again.');
-    } finally {
+      console.log('✅ Try-on request created with ID:', result.id);
+      console.log('📊 Status:', result.status);
+      
+      // Start polling for result
+      setTryonId(result.id);
+      
+      // The useEffect will handle the polling and status updates
+      
+    } catch (error: any) {
+      console.error('❌ Error generating virtual try-on:', error);
       setIsGenerating(false);
+      
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to generate virtual try-on. Please try again.';
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -419,6 +510,25 @@ export default function VirtualTryOnScreen() {
         </View>
 
         {/* Generate Button */}
+        {/* Background Toggle */}
+        <View style={styles.toggleSection}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleInfo}>
+              <ThemedText style={styles.toggleLabel}>Clean Background</ThemedText>
+              <ThemedText style={[styles.toggleSubtext, { color: '#999' }]}>
+                {useCleanBackground ? 'Professional studio backdrop' : 'Keep your original background'}
+              </ThemedText>
+            </View>
+            <TouchableOpacity
+              style={[styles.toggle, useCleanBackground && { backgroundColor: tintColor }]}
+              onPress={() => setUseCleanBackground(!useCleanBackground)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.toggleThumb, useCleanBackground && styles.toggleThumbActive]} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <TouchableOpacity 
           style={[
             styles.generateButton, 
@@ -430,9 +540,9 @@ export default function VirtualTryOnScreen() {
         >
           {isGenerating ? (
             <View style={styles.loadingContainer}>
-              <View style={styles.loadingSpinner} />
+              <ActivityIndicator size="small" color="white" />
               <ThemedText style={styles.generateButtonText}>
-                Generating Virtual Try-On...
+                {tryonResult?.status === 'processing' ? 'AI Generating...' : 'Uploading...'}
               </ThemedText>
             </View>
           ) : (
@@ -605,6 +715,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  toggleSection: {
+    marginBottom: 20,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  toggleInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  toggleSubtext: {
+    fontSize: 13,
+  },
+  toggle: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#ccc',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleThumb: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleThumbActive: {
+    alignSelf: 'flex-end',
+  },
   generateButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -663,20 +816,6 @@ const styles = StyleSheet.create({
   resultActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.2)',
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 4,
   },
   instructionsSection: {
     marginBottom: 24,

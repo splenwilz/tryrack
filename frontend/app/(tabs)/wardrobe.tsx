@@ -19,6 +19,7 @@ interface WardrobeItemCard {
   colors: string[];
   tags: string[];
   status: 'clean' | 'dirty' | 'worn';
+  created_at?: string;
 }
 
 
@@ -41,6 +42,14 @@ const WardrobeItemCard: React.FC<{
         <View style={[styles.statusBadge, { backgroundColor: '#FF9500', opacity: 0.9 }]}>
           <IconSymbol name="tshirt.fill" size={10} color="white" />
           <ThemedText style={styles.statusText}>Worn</ThemedText>
+        </View>
+      );
+    }
+    if (item.status === 'dirty') {
+      return (
+        <View style={[styles.statusBadge, { backgroundColor: '#FF3B30', opacity: 0.9 }]}>
+          <IconSymbol name="exclamationmark.circle.fill" size={10} color="white" />
+          <ThemedText style={styles.statusText}>Dirty</ThemedText>
         </View>
       );
     }
@@ -186,7 +195,7 @@ export default function WardrobeScreen() {
   
   // Get current user
   const { data: user } = useUser();
-  const userId = user?.id || 4; // Using actual logged in user ID
+  const userId = user?.id ?? 0; // Wait for real authenticated user
   
   // Fetch wardrobe items from API
   const { data: apiItems = [], isLoading, error } = useWardrobeItems(userId);
@@ -202,6 +211,7 @@ export default function WardrobeScreen() {
     colors: item.colors || [],
     tags: item.tags || [],
     status: item.status,
+    created_at: item.created_at,
   }));
   
   // Handler for status changes
@@ -224,18 +234,36 @@ export default function WardrobeScreen() {
     }
   };
   
-  // Filter items by category (only show clean items)
-  const topItems = wardrobeItems.filter(item => item.category === 'top' && item.status === 'clean');
-  const bottomItems = wardrobeItems.filter(item => item.category === 'bottom' && item.status === 'clean');
-  const shoeItems = wardrobeItems.filter(item => item.category === 'shoes' && item.status === 'clean');
-  const outerwearItems = wardrobeItems.filter(item => item.category === 'outerwear' && item.status === 'clean');
-  const dressItems = wardrobeItems.filter(item => item.category === 'dress' && item.status === 'clean');
-  const accessoryItems = wardrobeItems.filter(item => item.category === 'accessories' && item.status === 'clean');
-  const underwearItems = wardrobeItems.filter(item => item.category === 'underwear' && item.status === 'clean');
+  // 🏷️ Group items by dynamic category (from Gemini)
+  const groupedByCategory = React.useMemo(() => {
+    const groups: Record<string, WardrobeItemCard[]> = {};
+    
+    wardrobeItems.forEach(item => {
+      // Only group clean items; worn items go into their own section
+      // Also exclude "processing" category items
+      if (item.status === 'clean' && item.category !== 'processing') {
+        const category = item.category.toLowerCase().trim(); // Normalize
+        if (!groups[category]) {
+          groups[category] = [];
+        }
+        groups[category].push(item);
+      }
+    });
+    
+    // Sort categories by item count (descending)
+    const sortedCategories = Object.keys(groups).sort((a, b) => 
+      groups[b].length - groups[a].length
+    );
+    
+    return { groups, sortedCategories };
+  }, [wardrobeItems]);
+  
   const wornItems = wardrobeItems.filter(item => item.status === 'worn');
   
-  // Featured item (first outerwear item, if available)
-  const featuredItem = outerwearItems.length > 0 ? outerwearItems[0] : null;
+  // Featured item (first item from largest category)
+  const featuredItem = groupedByCategory.sortedCategories.length > 0 
+    ? groupedByCategory.groups[groupedByCategory.sortedCategories[0]][0] 
+    : null;
 
   // Mock notification count - in real app this would come from state/API
   const notificationCount = 3;
@@ -326,85 +354,45 @@ export default function WardrobeScreen() {
           </View>
         )}
 
-        {/* Recently Added */}
-        {wardrobeItems.length > 0 && (
-          <WardrobeCarousel
-            title="Recently Added"
-            items={wardrobeItems.slice(0, 4)}
-            onViewAll={() => handleViewAll('recent')}
-            style={!featuredItem ? { marginTop: 24 } : undefined}
-          />
-        )}
+        {/* Recently Added - Exclude processing items, sort by newest first */}
+        {(() => {
+          const recentItems = wardrobeItems
+            .filter(item => item.category !== 'processing' && item.status === 'clean')
+            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+            .slice(0, 4);
+          
+          return recentItems.length > 0 && (
+            <WardrobeCarousel
+              title="Recently Added"
+              items={recentItems}
+              onViewAll={() => handleViewAll('recent')}
+              style={!featuredItem ? { marginTop: 24 } : undefined}
+            />
+          );
+        })()}
 
-        {/* Tops */}
-        {topItems.length > 0 && (
-          <WardrobeCarousel
-            title="Tops"
-            items={topItems}
-            onViewAll={() => handleViewAll('top')}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-
-        {/* Bottoms */}
-        {bottomItems.length > 0 && (
-          <WardrobeCarousel
-            title="Bottoms"
-            items={bottomItems}
-            onViewAll={() => handleViewAll('bottom')}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-
-        {/* Shoes */}
-        {shoeItems.length > 0 && (
-          <WardrobeCarousel
-            title="Shoes"
-            items={shoeItems}
-            onViewAll={() => handleViewAll('shoes')}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-
-        {/* Outerwear */}
-        {outerwearItems.length > 0 && (
-          <WardrobeCarousel
-            title="Outerwear"
-            items={outerwearItems}
-            onViewAll={() => handleViewAll('outerwear')}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-
-        {/* Dresses */}
-        {dressItems.length > 0 && (
-          <WardrobeCarousel
-            title="Dresses"
-            items={dressItems}
-            onViewAll={() => handleViewAll('dress')}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-
-        {/* Accessories */}
-        {accessoryItems.length > 0 && (
-          <WardrobeCarousel
-            title="Accessories"
-            items={accessoryItems}
-            onViewAll={() => handleViewAll('accessories')}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-
-        {/* Underwear */}
-        {underwearItems.length > 0 && (
-          <WardrobeCarousel
-            title="Underwear"
-            items={underwearItems}
-            onViewAll={() => handleViewAll('underwear')}
-            onStatusChange={handleStatusChange}
-          />
-        )}
+        {/* 🏷️ Dynamic Category Sections - Auto-generated by Gemini */}
+        {groupedByCategory.sortedCategories.map((category) => {
+          const items = groupedByCategory.groups[category];
+          // Capitalize category name for display (e.g., "denim jacket" → "Denim Jacket")
+          const displayTitle = category
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+          
+          // Only add 's' if category doesn't already end in 's' (avoid "chinoss", "jeanss")
+          const pluralSuffix = category.endsWith('s') ? '' : 's';
+          
+          return (
+            <WardrobeCarousel
+              key={category}
+              title={`${displayTitle}${pluralSuffix} (${items.length})`}
+              items={items}
+              onViewAll={() => handleViewAll(category)}
+              onStatusChange={handleStatusChange}
+            />
+          );
+        })}
 
         {/* Worn Items Section */}
         {wornItems.length > 0 && (

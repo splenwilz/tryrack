@@ -5,7 +5,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useWardrobeItem, useDeleteWardrobeItem } from '@/hooks/useWardrobe';
+import { useWardrobeItem, useDeleteWardrobeItem, useUpdateWardrobeItemStatus } from '@/hooks/useWardrobe';
 import { useUser } from '@/hooks/useAuthQuery';
 import { ActivityIndicator } from 'react-native';
 
@@ -22,12 +22,13 @@ export default function WardrobeItemDetailScreen() {
   const textColor = useThemeColor({}, 'text');
   
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
-  const { data: user } = useUser();
+  const { data: user, isLoading: isUserLoading } = useUser();
   const userId = user?.id || 0;
   const itemIdNum = itemId ? parseInt(itemId) : 0;
   
-  const { data: item, isLoading, error } = useWardrobeItem(itemIdNum, userId);
+  const { data: item, isLoading: isItemLoading, error } = useWardrobeItem(itemIdNum, userId);
   const deleteMutation = useDeleteWardrobeItem();
+  const updateStatusMutation = useUpdateWardrobeItemStatus();
   
   const handleBackPress = () => {
     router.back();
@@ -56,13 +57,23 @@ export default function WardrobeItemDetailScreen() {
   };
 
   const handleMarkAsWorn = async () => {
-    // TODO: Implement status update
-    Alert.alert('Mark as Worn', 'This feature will be implemented soon');
+    if (!item) return;
+    try {
+      await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'worn' });
+      Alert.alert('Updated', `"${item.title}" marked as worn`);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to update status. Please try again.');
+    }
   };
 
   const handleMarkAsClean = async () => {
-    // TODO: Implement status update
-    Alert.alert('Mark as Clean', 'This feature will be implemented soon');
+    if (!item) return;
+    try {
+      await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'clean' });
+      Alert.alert('Updated', `"${item.title}" marked as clean`);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to update status. Please try again.');
+    }
   };
 
   const handleEditItem = () => {
@@ -99,7 +110,7 @@ export default function WardrobeItemDetailScreen() {
     );
   };
 
-  if (isLoading) {
+  if (isUserLoading || isItemLoading || !userId) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader title="Item Details" showBackButton={true} onBackPress={handleBackPress} />
@@ -118,7 +129,7 @@ export default function WardrobeItemDetailScreen() {
         <View style={styles.centerContent}>
           <ThemedText type="subtitle" style={styles.errorText}>Item not found</ThemedText>
           <ThemedText style={styles.errorDescription}>
-            The item yo&apos;re looking for doesn&apos;t exist or has been deleted.
+            The item you&apos;re looking for doesn&apos;t exist or has been deleted.
           </ThemedText>
         </View>
       </SafeAreaView>
@@ -163,16 +174,9 @@ export default function WardrobeItemDetailScreen() {
           {/* Title and Category */}
           <ThemedText type="title" style={styles.itemName}>{item.title}</ThemedText>
           <View style={styles.categoryBadge}>
+            {/* 🏷️ Generic tag icon for all dynamic categories */}
             <IconSymbol 
-              name={
-                item.category === 'top' ? 'tshirt.fill' :
-                item.category === 'bottom' ? 'figure.walk' :
-                item.category === 'dress' ? 'figure.dress.line.vertical.figure' :
-                item.category === 'shoes' ? 'shoe.fill' :
-                item.category === 'outerwear' ? 'jacket.fill' :
-                item.category === 'accessories' ? 'bag.fill' :
-                'tag.fill'
-              }
+              name="tag.fill"
               size={14}
               color={tintColor}
             />

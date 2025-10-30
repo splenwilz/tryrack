@@ -1,4 +1,6 @@
 cursorrule
+.cursorrules
+reviews/
 scripts/
 # Environment variables
 .env

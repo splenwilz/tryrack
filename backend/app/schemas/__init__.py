@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 
 class UserBase(BaseModel):
@@ -43,8 +43,7 @@ class UserInDB(UserBase):
     full_body_image_url: Optional[str] = None
     clothing_sizes: Optional[Dict[str, str]] = None  # Flexible JSON for gender-specific sizes
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class User(UserInDB):
@@ -113,23 +112,60 @@ class WardrobeItemResponse(WardrobeItemBase):
     """Schema for wardrobe item response."""
     id: int
     user_id: int
+    processing_status: str  # 🤖 'pending', 'processing', 'completed', 'failed'
+    ai_suggestions: Optional[Dict[str, Any]] = None  # 🤖 AI-suggested metadata
     image_original: Optional[str] = None
     image_clean: Optional[str] = None
     status: str
     created_at: datetime
     updated_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
-    
-    @staticmethod
-    def get_json_encoders():
-        """Custom JSON encoder to convert enum to lowercase string."""
-        return {
-            type: lambda v: v.value.lower() if hasattr(v, 'value') else str(v).lower()
-        }
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WardrobeItemStatusUpdate(BaseModel):
     """Schema for updating wardrobe item status."""
     status: str  # 'clean', 'worn', 'dirty'
+
+
+# ===== Virtual Try-On Schemas =====
+
+class ItemDetails(BaseModel):
+    """Item details for virtual try-on context."""
+    category: str
+    colors: List[str]
+    type: str  # 'wardrobe' or 'boutique'
+
+
+class VirtualTryOnRequest(BaseModel):
+    """Request schema for generating virtual try-on."""
+    user_image_url: str  # S3 URL of user's full body image
+    item_image_url: str  # S3 URL or external URL
+    item_details: ItemDetails
+    use_clean_background: bool = False  # Default: keep original background
+
+
+class VirtualTryOnResponse(BaseModel):
+    """Response schema for virtual try-on result."""
+    id: int
+    user_id: int
+    item_type: str
+    item_id: str
+    user_image_url: str
+    item_image_url: str
+    result_image_url: Optional[str] = None
+    status: str  # 'processing', 'completed', 'failed'
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VirtualTryOnCreate(BaseModel):
+    """Internal schema for creating virtual try-on record."""
+    user_id: int
+    item_type: str
+    item_id: str
+    user_image_url: str
+    item_image_url: str
