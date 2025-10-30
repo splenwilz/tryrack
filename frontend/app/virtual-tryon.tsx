@@ -1,11 +1,17 @@
-import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions, ActivityIndicator, Animated, Easing, Share, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+// Use legacy API to access cacheDirectory and downloadAsync consistently
+import * as FileSystem from 'expo-file-system/legacy';
+import { useUser } from '@/hooks/useAuthQuery';
+import { useGenerateVirtualTryOn, useVirtualTryOnResult, convertImageToBase64 } from '@/hooks/useVirtualTryOn';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 // Boutique item interface (same as in other files)
 interface BoutiqueItem {
@@ -23,6 +29,16 @@ interface BoutiqueItem {
     logo: string;
   };
   arAvailable: boolean;
+}
+
+// Wardrobe item interface
+interface WardrobeItemTryOn {
+  id: string;
+  title: string;
+  category: string;
+  imageUrl: string;
+  colors: string[];
+  tags: string[];
 }
 
 // Mock boutique data (same as in explore.tsx)
@@ -136,59 +152,232 @@ export default function VirtualTryOnScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const iconColor = useThemeColor({}, 'icon');
-  const { itemId } = useLocalSearchParams<{ itemId: string }>();
+  const { itemId, itemType, itemData } = useLocalSearchParams<{ itemId: string; itemType?: string; itemData?: string }>();
   
-  const [selectedItem, setSelectedItem] = useState<BoutiqueItem | null>(null);
+  // Get current user to check for existing full body photo
+  const { data: user } = useUser();
+  
+  const [selectedItem, setSelectedItem] = useState<BoutiqueItem | WardrobeItemTryOn | null>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
+  const [hasUsedExistingPhoto, setHasUsedExistingPhoto] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [tryonId, setTryonId] = useState<number | null>(null);
+  const [useCleanBackground, setUseCleanBackground] = useState(false); // Toggle for clean background
+  const TARGET_WIDTH = 640;
+  const COMPRESS_QUALITY = 0.6;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  
+  // API hooks
+  const generateMutation = useGenerateVirtualTryOn();
+  const { data: tryonResult } = useVirtualTryOnResult(
+    tryonId,
+    user?.id ?? 0,
+    tryonId !== null
+  );
 
   // Find the selected item
   useEffect(() => {
-    if (itemId) {
+    if (itemType === 'wardrobe' && itemData) {
+      // Parse wardrobe item data
+      try {
+        const parsedData = JSON.parse(itemData);
+        setSelectedItem(parsedData);
+      } catch (error) {
+        console.error('Error parsing wardrobe item data:', error);
+      }
+    } else if (itemId) {
+      // Find boutique item from mock data
       const item = mockBoutiqueData.find(item => item.id === itemId);
       setSelectedItem(item || null);
     }
-  }, [itemId]);
+  }, [itemId, itemType, itemData]);
+
+  // Initialize user photo from profile if available
+  useEffect(() => {
+    if (user?.full_body_image_url && !hasUsedExistingPhoto) {
+      setUserPhoto(user.full_body_image_url);
+    }
+  }, [user, hasUsedExistingPhoto]);
+  
+  // Handle polling result updates
+  useEffect(() => {
+    if (!tryonResult) return;
+    console.log('📊 Try-on status:', tryonResult.status);
+
+    if (tryonResult.status === 'completed') {
+      const url = tryonResult.result_image_url;
+      const b64 = tryonResult.result_image_base64;
+      if (url) {
+        setGeneratedImage(url);
+        setIsGenerating(false);
+        Alert.alert('Success!', 'Virtual try-on generated successfully!');
+      } else if (b64) {
+        // Show base64 immediately; polling will continue until URL arrives
+        setGeneratedImage(`data:image/png;base64,${b64}`);
+        setIsGenerating(false);
+      }
+    } else if (tryonResult.status === 'failed') {
+      setIsGenerating(false);
+      Alert.alert('Generation Failed', tryonResult.error_message || 'Failed to generate virtual try-on. Please try again.');
+    } else if (tryonResult.status === 'processing') {
+      setIsGenerating(true);
+    }
+  }, [tryonResult]);
+
+  // Simple animated loader while generating
+  useEffect(() => {
+    if (isGenerating) {
+      Animated.loop(
+        Animated.timing(progressAnim, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        })
+      ).start();
+    } else {
+      progressAnim.stopAnimation(() => progressAnim.setValue(0));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating, progressAnim]);
 
   const handleBackPress = () => {
     router.back();
   };
 
-  const handleSelectPhoto = () => {
+  const handleUseExistingPhoto = () => {
+    setHasUsedExistingPhoto(true);
+    // Photo is already set in state
+    Alert.alert('Photo Ready', 'Using your existing full body photo for virtual try-on');
+  };
+
+  const handleSelectNewPhoto = async () => {
     Alert.alert(
-      'Select Photo',
-      'Choose how you\'d like to add your photo for virtual try-on',
+      'Select New Photo',
+      'Choose how you\'d like to upload a new photo',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Take Photo', 
-          onPress: () => {
-            // Mock camera functionality - simulate taking a photo
-            console.log('Opening camera...');
-            setTimeout(() => {
-              setUserPhoto('https://images.unsplash.com/photo-1494790108755-2616b612b786?w=400&h=600&fit=crop');
-              Alert.alert('Photo Taken', 'Photo captured successfully!');
-            }, 1000);
+          onPress: async () => {
+            try {
+              const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+              
+              if (!permissionResult.granted) {
+                Alert.alert('Permission Required', 'Camera access is needed to take photos');
+                return;
+              }
+              
+              const result = await ImagePicker.launchCameraAsync({
+                quality: 1,
+                base64: false,
+              });
+              
+              if (!result.canceled && result.assets[0]) {
+                // Resize image to reduce size
+                const manipulatedImage = await ImageManipulator.manipulateAsync(
+                  result.assets[0].uri,
+                  [{ resize: { width: TARGET_WIDTH } }],
+                  { compress: COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+                );
+                
+                setUserPhoto(manipulatedImage.uri);
+                setHasUsedExistingPhoto(true);
+                Alert.alert('Photo Taken', 'Photo captured successfully!');
+              }
+            } catch (error) {
+              console.error('Error taking photo:', error);
+              Alert.alert('Error', 'Failed to take photo');
+            }
           }
         },
         { 
           text: 'Choose from Gallery', 
-          onPress: () => {
-            // Mock gallery functionality - simulate selecting a photo
-            console.log('Opening gallery...');
-            setTimeout(() => {
-              setUserPhoto('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=600&fit=crop');
-              Alert.alert('Photo Selected', 'Photo selected from gallery!');
-            }, 1000);
+          onPress: async () => {
+            try {
+              const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              
+              if (!permissionResult.granted) {
+                Alert.alert('Permission Required', 'Photo library access is needed');
+                return;
+              }
+              
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 1,
+                base64: false,
+              });
+              
+              if (!result.canceled && result.assets[0]) {
+                // Resize image to reduce size
+                const manipulatedImage = await ImageManipulator.manipulateAsync(
+                  result.assets[0].uri,
+                  [{ resize: { width: TARGET_WIDTH } }],
+                  { compress: COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+                );
+                
+                setUserPhoto(manipulatedImage.uri);
+                setHasUsedExistingPhoto(true);
+                Alert.alert('Photo Selected', 'Photo selected from gallery!');
+              }
+            } catch (error) {
+              console.error('Error selecting photo:', error);
+              Alert.alert('Error', 'Failed to select photo');
+            }
           }
         }
       ]
     );
   };
 
+  const handleSelectPhoto = () => {
+    if (user?.full_body_image_url && !hasUsedExistingPhoto) {
+      // Show option to use existing or upload new
+      Alert.alert(
+        'Select Photo',
+        'You have a saved full body photo. Would you like to use it or upload a new one?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Use Existing Photo', 
+            onPress: handleUseExistingPhoto
+          },
+          { 
+            text: 'Upload New Photo', 
+            onPress: handleSelectNewPhoto
+          }
+        ]
+      );
+    } else {
+      // No existing photo, go directly to upload
+      handleSelectNewPhoto();
+    }
+  };
+
+  async function toCompressedBase64(uri: string): Promise<string> {
+    try {
+      let localUri = uri;
+      if (uri.startsWith('http')) {
+        const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+        const download = await FileSystem.downloadAsync(uri, `${cacheDir}tryon_${Date.now()}.jpg`);
+        localUri = download.uri;
+      }
+      const manipulated = await ImageManipulator.manipulateAsync(
+        localUri,
+        [{ resize: { width: TARGET_WIDTH } }],
+        { compress: COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      // manipulated.base64 is without data URI prefix
+      return manipulated.base64 || '';
+    } catch (e) {
+      // Fallback to non-compressed conversion
+      return await convertImageToBase64(uri);
+    }
+  }
+
   const handleGenerateTryOn = async () => {
-    if (!selectedItem || !userPhoto) {
+    if (!selectedItem || !userPhoto || !user?.id) {
       Alert.alert('Missing Information', 'Please select both an item and your photo to generate virtual try-on');
       return;
     }
@@ -196,26 +385,50 @@ export default function VirtualTryOnScreen() {
     setIsGenerating(true);
     
     try {
-      // TODO: Implement Gemini API integration
-      // This will use Gemini's image generation to combine user photo with product
-      console.log('Generating virtual try-on with Gemini API...');
-      console.log('Selected item:', selectedItem.title);
-      console.log('User photo:', userPhoto);
+      console.log('🎨 Generating virtual try-on with Gemini API...');
+      console.log('📦 Selected item:', selectedItem.title);
+      console.log('🏷️ Item type:', itemType || 'boutique');
+      console.log('📸 User photo URL:', userPhoto);
       
-      // Simulate API call with progress updates
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Always send compressed base64 for both images to speed up Gemini
+      const user_image_base64 = await toCompressedBase64(userPhoto);
+      const item_image_base64 = selectedItem.imageUrl ? await toCompressedBase64(selectedItem.imageUrl) : undefined;
+
+      const request = {
+        user_image_url: undefined,
+        item_image_url: undefined,
+        user_image_base64,
+        item_image_base64,
+        item_details: {
+          category: selectedItem.category,
+          colors: selectedItem.colors || [],
+          type: (itemType || 'boutique') as 'wardrobe' | 'boutique',
+        },
+        use_clean_background: useCleanBackground, // User preference
+      };
       
-      // Mock generated image (replace with actual Gemini API result)
-      // Using a realistic virtual try-on result image
-      setGeneratedImage('https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=600&fit=crop');
+      console.log('🚀 Sending request to backend...');
       
-      Alert.alert('Success!', 'Virtual try-on generated successfully!');
+      // Call API to generate try-on
+      const result = await generateMutation.mutateAsync({
+        userId: user.id,
+        request,
+      });
       
-    } catch (error) {
-      console.error('Error generating virtual try-on:', error);
-      Alert.alert('Error', 'Failed to generate virtual try-on. Please try again.');
-    } finally {
+      console.log('✅ Try-on request created with ID:', result.id);
+      console.log('📊 Status:', result.status);
+      
+      // Start polling for result
+      setTryonId(result.id);
+      
+      // The useEffect will handle the polling and status updates
+      
+    } catch (error: any) {
+      console.error('❌ Error generating virtual try-on:', error);
       setIsGenerating(false);
+      
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to generate virtual try-on. Please try again.';
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -223,8 +436,42 @@ export default function VirtualTryOnScreen() {
     Alert.alert('Save Result', 'Virtual try-on result saved to your gallery!');
   };
 
-  const handleShareResult = () => {
-    Alert.alert('Share Result', 'Share your virtual try-on result with friends!');
+  const handleShareResult = async () => {
+    try {
+      if (!generatedImage) {
+        Alert.alert('No Image', 'Generate a virtual try-on first.');
+        return;
+      }
+
+      let uriToShare = generatedImage;
+      // If base64, persist to a temp file and share the file URL
+      if (generatedImage.startsWith('data:image')) {
+        const b64 = generatedImage.split(',')[1] || '';
+        const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+        const tempPath = `${cacheDir}tryon_share_${Date.now()}.png`;
+        await FileSystem.writeAsStringAsync(tempPath, b64, { encoding: (FileSystem as any).EncodingType?.Base64 || 'base64' });
+        uriToShare = tempPath;
+      }
+
+      // Android: convert local file path to content:// URI so the target app can read
+      let shareUrl = uriToShare;
+      if (Platform.OS === 'android' && !uriToShare.startsWith('http')) {
+        const toContent = (FileSystem as any).getContentUriAsync;
+        if (typeof toContent === 'function') {
+          shareUrl = await toContent(uriToShare);
+        }
+      }
+
+      const message = `My TryRack virtual try-on ✨\n${shareUrl}`;
+      await Share.share(
+        Platform.OS === 'android'
+          ? { message, title: 'TryRack' }
+          : { url: shareUrl, message: 'My TryRack virtual try-on ✨', title: 'TryRack' }
+      );
+    } catch (e) {
+      console.error('❌ Share failed:', e);
+      Alert.alert('Share Failed', 'Could not share the image. Please try again.');
+    }
   };
 
   if (!selectedItem) {
@@ -253,13 +500,25 @@ export default function VirtualTryOnScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Product Information */}
         <View style={styles.productSection}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>Product</ThemedText>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>{itemType === 'wardrobe' ? 'Your Item' : 'Product'}</ThemedText>
           <View style={[styles.productCard, { backgroundColor }]}>
             <Image source={{ uri: selectedItem.imageUrl }} style={styles.productImage} />
             <View style={styles.productInfo}>
-              <ThemedText style={styles.brandName}>{selectedItem.brand}</ThemedText>
+              {'brand' in selectedItem && <ThemedText style={styles.brandName}>{selectedItem.brand}</ThemedText>}
               <ThemedText style={styles.productTitle}>{selectedItem.title}</ThemedText>
-              <ThemedText style={styles.price}>₦{selectedItem.price.toLocaleString()}</ThemedText>
+              {'price' in selectedItem && <ThemedText style={styles.price}>₦{selectedItem.price.toLocaleString()}</ThemedText>}
+              {'colors' in selectedItem && selectedItem.colors && (
+                <View style={styles.colorsContainer}>
+                  <ThemedText style={styles.colorsLabel}>Colors:</ThemedText>
+                  <View style={styles.colorsList}>
+                    {selectedItem.colors.map((color: string) => (
+                      <View key={color} style={[styles.colorChip, { backgroundColor: tintColor }]}>
+                        <ThemedText style={styles.colorText}>{color}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -267,18 +526,63 @@ export default function VirtualTryOnScreen() {
         {/* User Photo Section */}
         <View style={styles.photoSection}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>Your Photo</ThemedText>
-          <TouchableOpacity style={[styles.photoButton, { backgroundColor }]} onPress={handleSelectPhoto}>
-            {userPhoto ? (
+          
+          {/* Show existing full body photo with option to use or replace */}
+          {user?.full_body_image_url && userPhoto === user.full_body_image_url && !hasUsedExistingPhoto && (
+            <View style={styles.existingPhotoContainer}>
+              <View style={[styles.photoCard, { backgroundColor }]}>
+                <Image source={{ uri: userPhoto }} style={styles.existingPhoto} />
+                <View style={styles.existingPhotoInfo}>
+                  <ThemedText style={styles.existingPhotoTitle}>Use your saved full body photo?</ThemedText>
+                  <ThemedText style={styles.existingPhotoSubtext}>
+                    We found your existing full body photo. You can use it or upload a new one.
+                  </ThemedText>
+                  <View style={styles.photoActionButtons}>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, { backgroundColor: `${tintColor}22` }]}
+                      onPress={handleUseExistingPhoto}
+                    >
+                      <IconSymbol name="checkmark.circle.fill" size={16} color={tintColor} />
+                      <ThemedText style={[styles.actionButtonText, { color: tintColor }]}>
+                        Use This Photo
+                      </ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, { backgroundColor: `${tintColor}22` }]}
+                      onPress={handleSelectNewPhoto}
+                    >
+                      <IconSymbol name="camera.fill" size={16} color={tintColor} />
+                      <ThemedText style={[styles.actionButtonText, { color: tintColor }]}>
+                        Upload New
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Show selected photo */}
+          {userPhoto && hasUsedExistingPhoto && (
+            <TouchableOpacity style={[styles.photoButton, { backgroundColor }]} onPress={handleSelectPhoto}>
               <View style={styles.photoContainer}>
                 <Image source={{ uri: userPhoto }} style={styles.userPhoto} />
                 <TouchableOpacity 
                   style={styles.removePhotoButton} 
-                  onPress={() => setUserPhoto(null)}
+                  onPress={() => {
+                    setUserPhoto(null);
+                    setHasUsedExistingPhoto(false);
+                  }}
                 >
                   <IconSymbol name="plus" size={16} color="white" style={{ transform: [{ rotate: '45deg' }] }} />
                 </TouchableOpacity>
               </View>
-            ) : (
+            </TouchableOpacity>
+          )}
+
+          {/* Show add photo button if no photo selected */}
+          {!userPhoto && !user?.full_body_image_url && (
+            <TouchableOpacity style={[styles.photoButton, { backgroundColor }]} onPress={handleSelectPhoto}>
               <View style={styles.photoPlaceholder}>
                 <IconSymbol name="plus" size={32} color={iconColor} />
                 <ThemedText style={styles.photoPlaceholderText}>Add Your Photo</ThemedText>
@@ -286,11 +590,30 @@ export default function VirtualTryOnScreen() {
                   Take a photo or choose from gallery
                 </ThemedText>
               </View>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Generate Button */}
+        {/* Background Toggle */}
+        <View style={styles.toggleSection}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleInfo}>
+              <ThemedText style={styles.toggleLabel}>Clean Background</ThemedText>
+              <ThemedText style={[styles.toggleSubtext, { color: '#999' }]}>
+                {useCleanBackground ? 'Professional studio backdrop' : 'Keep your original background'}
+              </ThemedText>
+            </View>
+            <TouchableOpacity
+              style={[styles.toggle, useCleanBackground && { backgroundColor: tintColor }]}
+              onPress={() => setUseCleanBackground(!useCleanBackground)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.toggleThumb, useCleanBackground && styles.toggleThumbActive]} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <TouchableOpacity 
           style={[
             styles.generateButton, 
@@ -302,9 +625,9 @@ export default function VirtualTryOnScreen() {
         >
           {isGenerating ? (
             <View style={styles.loadingContainer}>
-              <View style={styles.loadingSpinner} />
+              <ActivityIndicator size="small" color="white" />
               <ThemedText style={styles.generateButtonText}>
-                Generating Virtual Try-On...
+                {tryonResult?.status === 'processing' ? 'AI Generating...' : 'Uploading...'}
               </ThemedText>
             </View>
           ) : (
@@ -316,6 +639,22 @@ export default function VirtualTryOnScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {/* Engaging loader while AI is generating */}
+        {isGenerating && !generatedImage && (
+          <View style={styles.loaderSection}>
+            <ThemedText style={styles.loaderTitle}>Crafting your look...</ThemedText>
+            <View style={[styles.resultCard, { backgroundColor, alignItems: 'center' }]}> 
+              <Image
+                source={{ uri: 'https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif' }}
+                style={styles.characterAnimation}
+                resizeMode="contain"
+                accessibilityLabel="Walking character while we create your try-on"
+              />
+              <ThemedText style={styles.loaderCaption}>Hang tight — almost there</ThemedText>
+            </View>
+          </View>
+        )}
 
         {/* Generated Result */}
         {generatedImage && (
@@ -477,6 +816,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  toggleSection: {
+    marginBottom: 20,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  toggleInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  toggleSubtext: {
+    fontSize: 13,
+  },
+  toggle: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#ccc',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleThumb: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleThumbActive: {
+    alignSelf: 'flex-end',
+  },
   generateButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -536,19 +918,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.2)',
+  loaderSection: {
+    marginBottom: 24,
   },
-  actionButtonText: {
+  loaderTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 4,
+    fontWeight: '500',
+    marginBottom: 8,
+    opacity: 0.8,
+  },
+  loaderImagePlaceholder: {
+    width: '100%',
+    height: 300,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginBottom: 12,
+  },
+  characterAnimation: {
+    width: '100%',
+    height: 220,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  progressBar: {
+    width: 80,
+    height: '100%',
+    borderRadius: 4,
+  },
+  loaderCaption: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginBottom: 4,
   },
   instructionsSection: {
     marginBottom: 24,
@@ -576,5 +982,78 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
+  },
+  colorsContainer: {
+    marginTop: 8,
+  },
+  colorsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    opacity: 0.7,
+  },
+  colorsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  colorChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  colorText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'white',
+  },
+  existingPhotoContainer: {
+    marginBottom: 16,
+  },
+  photoCard: {
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  existingPhoto: {
+    width: '100%',
+    height: 300,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  existingPhotoInfo: {
+    paddingHorizontal: 4,
+  },
+  existingPhotoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  existingPhotoSubtext: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  photoActionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

@@ -36,6 +36,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="tryon-history"
+        options={{
+          title: 'Try-Ons',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="sparkles" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="wishlist"
         options={{
           title: 'Wishlist',

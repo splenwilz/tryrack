@@ -74,6 +74,7 @@ def upload_file_from_base64(
     start_time = time.time()
     
     try:
+        print(f"📤 S3: Starting upload for {object_name}")
         logger.debug("Starting S3 upload", extra={"object": object_name})
         
         # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
@@ -84,10 +85,13 @@ def upload_file_from_base64(
         decode_start = time.time()
         file_content = base64.b64decode(base64_data)
         decode_time = (time.time() - decode_start) * 1000
+        file_size_mb = len(file_content) / 1024 / 1024
+        print(f"📦 S3: Decoded {file_size_mb:.2f}MB in {decode_time:.0f}ms")
         logger.debug("Base64 decode complete", extra={"time_ms": decode_time, "size_bytes": len(file_content)})
         
         # Upload to S3 (no ACL for modern buckets)
         upload_start = time.time()
+        print(f"☁️ S3: Uploading {file_size_mb:.2f}MB to S3...")
         s3_client.put_object(
             Bucket=bucket_name,
             Key=object_name,
@@ -95,10 +99,13 @@ def upload_file_from_base64(
             ContentType=content_type
         )
         upload_time = (time.time() - upload_start) * 1000
+        upload_speed = (file_size_mb / (upload_time / 1000)) if upload_time > 0 else 0
+        print(f"✅ S3: Upload complete in {upload_time:.0f}ms ({upload_speed:.2f} MB/s)")
         logger.debug("S3 upload complete", extra={"time_ms": upload_time})
         
         url = f"https://{bucket_name}.s3.{settings.AWS_REGION}.amazonaws.com/{object_name}"
         total_time = (time.time() - start_time) * 1000
+        print(f"🎯 S3: Total S3 operation took {total_time:.0f}ms")
         logger.info("S3 upload successful", extra={"time_ms": total_time, "object": object_name})
         return url
         

@@ -60,6 +60,13 @@ const MAPPING = {
   'ruler': 'square-foot',
   'scalemass': 'monitor-weight',
   'person.circle': 'account-circle',
+  'figure.walk': 'directions-walk',
+  'figure.dress.line.vertical.figure': 'checkroom',
+  'shoe.fill': 'directions-run',
+  'jacket.fill': 'checkroom',
+  'tag.fill': 'local-offer',
+  'exclamationmark.circle.fill': 'error',
+  'sparkles': 'auto-awesome',
 } as IconMapping;
 
 /**

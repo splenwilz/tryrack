@@ -42,6 +42,8 @@ export default function RootLayout() {
                 <Stack.Screen name="terms-of-service" options={{ headerShown: false }} />
                 <Stack.Screen name="privacy-policy" options={{ headerShown: false }} />
                 <Stack.Screen name="licenses" options={{ headerShown: false }} />
+                <Stack.Screen name="add-item" options={{ headerShown: false }} />
+                <Stack.Screen name="wardrobe-item-detail" options={{ headerShown: false }} />
                 <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
               </Stack>
               <StatusBar style="auto" />

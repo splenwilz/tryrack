@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     AWS_S3_BUCKET_NAME: Optional[str] = None
     
+    # Gemini API Configuration
+    GEMINI_API_KEY: Optional[str] = None
+    
     # Environment
     ENVIRONMENT: str = "development"
     DEBUG: bool = True

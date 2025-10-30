@@ -1,7 +1,100 @@
 import { CategoryViewScreen } from '@/components/home/CategoryViewScreen';
 import { useLocalSearchParams } from 'expo-router';
+import { useUser } from '@/hooks/useAuthQuery';
+import { useWardrobeItems } from '@/hooks/useWardrobe';
+import { View, ActivityIndicator } from 'react-native';
+import { ThemedText } from '@/components/themed-text';
+import { useThemeColor } from '@/hooks/use-theme-color';
 
-// Mock wardrobe data - same as in wardrobe.tsx
+/**
+ * Category View Route Component
+ * Handles navigation to specific wardrobe categories with API data
+ */
+export default function CategoryView() {
+  const { data: user } = useUser();
+  const userId = user?.id || 0;
+  
+  const { data: allItems = [], isLoading, error } = useWardrobeItems(userId);
+  
+  const params = useLocalSearchParams<{ category?: string | string[] }>();
+  const category = Array.isArray(params.category) ? params.category[0] : params.category;
+  
+  const backgroundColor = useThemeColor({}, 'background');
+  const tintColor = useThemeColor({}, 'tint');
+  
+  if (!category) {
+    return null;
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <CategoryViewScreen 
+        category={category} 
+        items={[]}
+        isLoading={true}
+      />
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <CategoryViewScreen 
+        category={category} 
+        items={[]}
+        error={error}
+      />
+    );
+  }
+
+  // Convert API items to display format
+  const convertedItems = allItems.map(item => ({
+    id: item.id.toString(),
+    title: item.title,
+    category: item.category,
+    imageUrl: item.image_clean || item.image_original || 'https://via.placeholder.com/150',
+    colors: item.colors || [],
+    tags: item.tags || [],
+  }));
+
+  // Filter items by category
+  let categoryItems;
+  if (category === 'recent') {
+    // Show recently added items (first 10 items by created_at)
+    categoryItems = [...convertedItems]
+      .sort((a, b) => b.id.localeCompare(a.id))
+      .slice(0, 10);
+  } else {
+    // Map category name from UI to backend category
+    const categoryMap: Record<string, string> = {
+      'tops': 'top',
+      'bottoms': 'bottom',
+      'shoes': 'shoes',
+      'outerwear': 'outerwear',
+      'dress': 'dress',
+      'accessories': 'accessories',
+      'underwear': 'underwear',
+    };
+    
+    const backendCategory = categoryMap[category] || category;
+    
+    // Filter items by category (only show clean items)
+    categoryItems = convertedItems.filter(
+      item => item.category === backendCategory && 
+      allItems.find(apiItem => apiItem.id.toString() === item.id)?.status === 'clean'
+    );
+  }
+
+  return (
+    <CategoryViewScreen 
+      category={category} 
+      items={categoryItems}
+    />
+  );
+}
+
+// Deprecated mock data - kept for reference
 const mockWardrobeData = [
   // TOPS
   {
@@ -161,34 +254,3 @@ const mockWardrobeData = [
     tags: ['lace', 'elegant']
   }
 ];
-
-/**
- * Category View Route Component
- * Handles navigation to specific wardrobe categories
- * Uses URL parameters to determine which category to display
- */
-export default function CategoryView() {
-  const params = useLocalSearchParams<{ category?: string | string[] }>();
-  const category = Array.isArray(params.category) ? params.category[0] : params.category;
-  
-  // Handle special cases and filter items by category
-  let categoryItems: typeof mockWardrobeData;
-  if (category === 'recent') {
-    // Show recently added items (first 4 items)
-    categoryItems = mockWardrobeData.slice(0, 4);
-  } else {
-    // Filter items by category
-    categoryItems = mockWardrobeData.filter(item => item.category === category);
-  }
-  
-  if (!category) {
-    return null; // Handle missing category parameter
-  }
-
-  return (
-    <CategoryViewScreen 
-      category={category} 
-      items={categoryItems} 
-    />
-  );
-}
