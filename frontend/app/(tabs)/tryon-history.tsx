@@ -2,7 +2,7 @@
  * Try-On History Screen
  * Shows all completed virtual try-ons for the user
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -28,18 +28,21 @@ const ITEM_WIDTH = (width - 48) / 2; // 2 columns with padding
 
 export default function TryOnHistoryScreen() {
   const router = useRouter();
-  const { data: user } = useUser();
+  const { data: user, isLoading: isUserLoading } = useUser();
   const [refreshing, setRefreshing] = useState(false);
   const [notificationCount] = useState(0); // Placeholder for notifications
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  
+  // Derive userId once user is loaded
+  const userId = user?.id ?? 0;
   
   const { 
     data: tryons, 
     isLoading,
     isFetching,
     refetch 
-  } = useTryOnHistory(user?.id ?? 0);
+  } = useTryOnHistory(userId);
   
   // Theme colors
   const backgroundColor = useThemeColor({}, 'background');
@@ -85,6 +88,18 @@ export default function TryOnHistoryScreen() {
     });
   };
 
+  const formatDate = useCallback((dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    return date.toLocaleDateString();
+  }, []);
+
   // Filter try-ons based on search query
   const filteredTryons = useMemo(() => {
     if (!tryons) return [];
@@ -96,19 +111,7 @@ export default function TryOnHistoryScreen() {
       const date = formatDate(item.created_at).toLowerCase();
       return category.includes(query) || date.includes(query);
     });
-  }, [tryons, searchQuery]);
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return date.toLocaleDateString();
-  };
+  }, [tryons, searchQuery, formatDate]);
 
   const renderItem = ({ item }: { item: any }) => (
     <TouchableOpacity
@@ -146,7 +149,8 @@ export default function TryOnHistoryScreen() {
     </View>
   );
 
-  if (isLoading && !tryons) {
+  // Show loading state until user is loaded AND initial try-ons fetch completes
+  if (isUserLoading || (isLoading && !tryons)) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader

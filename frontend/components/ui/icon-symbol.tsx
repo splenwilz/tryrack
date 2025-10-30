@@ -66,6 +66,7 @@ const MAPPING = {
   'jacket.fill': 'checkroom',
   'tag.fill': 'local-offer',
   'exclamationmark.circle.fill': 'error',
+  'sparkles': 'auto-awesome',
 } as IconMapping;
 
 /**

@@ -242,17 +242,22 @@ async def generate_virtual_tryon(
         item_image_base64: Base64 encoded item photo
         item_category: Category of the item (e.g., "dress", "shirt")
         item_colors: List of colors for the item
+        use_clean_background: Whether to replace background with clean one
         
     Returns:
         Base64 encoded result image or None if failed
     """
-    logger.info(f"👕 Generating virtual try-on for {item_category} in colors {item_colors}")
+    import time
+    function_start = time.time()
+    print(f"👕 [0.0s] Starting virtual try-on for {item_category} in colors {item_colors}, clean_bg: {use_clean_background}")
+    logger.info(f"👕 [0.0s] Starting virtual try-on for {item_category} in colors {item_colors}, clean_bg: {use_clean_background}")
     
     try:
         # Determine MIME types from base64 signatures
+        mime_start = time.time()
+        
         if user_image_base64.startswith('/9j/') or user_image_base64.startswith('data:image/jpeg'):
             user_mime = 'image/jpeg'
-            # Remove data URI prefix if present
             if user_image_base64.startswith('data:'):
                 user_image_base64 = user_image_base64.split(',', 1)[1]
         elif user_image_base64.startswith('iVBOR') or user_image_base64.startswith('data:image/png'):
@@ -273,7 +278,14 @@ async def generate_virtual_tryon(
         else:
             item_mime = 'image/jpeg'  # Default
         
-        logger.info(f"🎨 User image MIME: {user_mime}, Item image MIME: {item_mime}")
+        mime_elapsed = time.time() - mime_start
+        elapsed = time.time() - function_start
+        
+        # Log base64 sizes
+        user_b64_size = len(user_image_base64) / 1024 / 1024  # MB
+        item_b64_size = len(item_image_base64) / 1024 / 1024  # MB
+        print(f"📊 [{elapsed:.1f}s] Base64 sizes - User: {user_b64_size:.2f}MB, Item: {item_b64_size:.2f}MB")
+        logger.info(f"📊 [{elapsed:.1f}s] Base64 sizes - User: {user_b64_size:.2f}MB, Item: {item_b64_size:.2f}MB")
         
         # Prepare Gemini API payload with multimodal content
         colors_text = ", ".join(item_colors) if item_colors else "original colors"
@@ -334,18 +346,24 @@ Return ONLY the final generated image with the person wearing the {item_category
             "Content-Type": "application/json"
         }
         
-        logger.info("🚀 Sending request to Gemini 2.5 Flash Image for virtual try-on...")
-        start_time = time.time()
+        elapsed = time.time() - function_start
+        print(f"🚀 [{elapsed:.1f}s] Sending request to Gemini 2.5 Flash Image API...")
+        logger.info(f"🚀 [{elapsed:.1f}s] Sending request to Gemini 2.5 Flash Image API...")
+        api_start = time.time()
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(api_url, headers=headers, json=payload)
             response.raise_for_status()
             result = response.json()
         
-        elapsed = time.time() - start_time
-        logger.info(f"✅ Gemini virtual try-on completed in {elapsed:.2f}s")
+        api_elapsed = time.time() - api_start
+        total_elapsed = time.time() - function_start
+        print(f"✅ [{total_elapsed:.1f}s] Gemini API call took {api_elapsed:.1f}s")
+        logger.info(f"✅ [{total_elapsed:.1f}s] Gemini API call took {api_elapsed:.1f}s")
         
         # Extract result image from response (same format as background removal)
+        extract_start = time.time()
+        
         if "candidates" in result and len(result["candidates"]) > 0:
             candidate = result["candidates"][0]
             
@@ -354,16 +372,24 @@ Return ONLY the final generated image with the person wearing the {item_category
                 for part in candidate["content"]["parts"]:
                     if "inlineData" in part:
                         result_image_base64 = part["inlineData"]["data"]
-                        logger.info("✨ Successfully generated virtual try-on image")
+                        result_size = len(result_image_base64) / 1024 / 1024  # MB
+                        extract_elapsed = time.time() - extract_start
+                        total_elapsed = time.time() - function_start
+                        print(f"✨ [{total_elapsed:.1f}s] Successfully generated virtual try-on image ({result_size:.2f}MB)")
+                        print(f"📊 GEMINI TIMING - Prep: {elapsed:.1f}s | API Call: {api_elapsed:.1f}s | Extract: {extract_elapsed:.3f}s | Total: {total_elapsed:.1f}s")
+                        logger.info(f"✨ [{total_elapsed:.1f}s] Successfully generated virtual try-on image ({result_size:.2f}MB)")
+                        logger.info(f"📊 GEMINI TIMING - Prep: {elapsed:.1f}s | API Call: {api_elapsed:.1f}s | Extract: {extract_elapsed:.3f}s | Total: {total_elapsed:.1f}s")
                         return result_image_base64
                     elif "text" in part:
                         logger.warning(f"⚠️ Received text response instead of image: {part['text'][:200]}")
             
-            logger.error("❌ No image data found in Gemini response")
+            total_elapsed = time.time() - function_start
+            logger.error(f"❌ [{total_elapsed:.1f}s] No image data found in Gemini response")
             logger.debug(f"Response structure: {json.dumps(result, indent=2)[:500]}")
             return None
         else:
-            logger.error("❌ No candidates in Gemini response")
+            total_elapsed = time.time() - function_start
+            logger.error(f"❌ [{total_elapsed:.1f}s] No candidates in Gemini response")
             logger.debug(f"Response: {json.dumps(result, indent=2)[:500]}")
             return None
             

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, View, TouchableOpacity, Image, Alert, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
@@ -164,15 +164,31 @@ export default function AddItemScreen() {
   const [processingStage, setProcessingStage] = useState<ProcessingStage>(null); // 🎨 Current AI stage
   const [showShimmer, setShowShimmer] = useState(false); // 🎨 Control shimmer visibility
   
+  // Use ref to track interval and prevent multiple creations
+  const cycleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
   // 🎨 Poll for AI processing updates immediately after image upload
   const { data: processingItem } = useWardrobeItemWithPolling(
     processingId || 0,
     user?.id || 0
   );
   
+  // Memoize form emptiness check to avoid triggering effects on every keystroke
+  const isFormEmpty = React.useMemo(() => 
+    !formData.title && selectedColors.length === 0 && selectedTags.length === 0,
+    [formData.title, selectedColors.length, selectedTags.length]
+  );
+  
   // 🎨 Auto-progress through processing stages based on backend status
   useEffect(() => {
-    if (!isProcessingLocally) return;
+    if (!isProcessingLocally) {
+      // Clear interval if processing stopped
+      if (cycleIntervalRef.current) {
+        clearInterval(cycleIntervalRef.current);
+        cycleIntervalRef.current = null;
+      }
+      return;
+    }
     
     // Map backend status to frontend stage
     const backendStatus = processingItem?.processing_status;
@@ -180,7 +196,15 @@ export default function AddItemScreen() {
     if (backendStatus === 'pending') {
       setProcessingStage('uploading');
       setShowShimmer(true);
+      // Clear any existing interval
+      if (cycleIntervalRef.current) {
+        clearInterval(cycleIntervalRef.current);
+        cycleIntervalRef.current = null;
+      }
     } else if (backendStatus === 'processing') {
+      // Only create interval if not already cycling
+      if (cycleIntervalRef.current) return;
+      
       // Cycle through analyzing → enhancing → extracting while backend processes
       const processingStages: Exclude<ProcessingStage, 'uploading' | 'complete' | null>[] = [
         'analyzing',
@@ -192,14 +216,20 @@ export default function AddItemScreen() {
       setProcessingStage(processingStages[0]);
       setShowShimmer(true);
       
-      const cycleInterval = setInterval(() => {
+      cycleIntervalRef.current = setInterval(() => {
         currentIndex = (currentIndex + 1) % processingStages.length;
         setProcessingStage(processingStages[currentIndex]);
         console.log(`🎨 DEBUG: Cycling stage: ${processingStages[currentIndex]}`);
       }, 5000); // Change stage every 5s while processing
-      
-      return () => clearInterval(cycleInterval);
     }
+    
+    // Cleanup on unmount
+    return () => {
+      if (cycleIntervalRef.current) {
+        clearInterval(cycleIntervalRef.current);
+        cycleIntervalRef.current = null;
+      }
+    };
   }, [isProcessingLocally, processingItem?.processing_status]);
   
   // Load existing item data when editing
@@ -242,9 +272,7 @@ export default function AddItemScreen() {
     if (processingItem?.processing_status === 'completed' && processingItem.ai_suggestions) {
       console.log('🎨 DEBUG: AI suggestions received for item', processingItem.id, ':', processingItem.ai_suggestions);
       
-      // Only auto-fill if form is still empty
-      const isFormEmpty = !formData.title && selectedColors.length === 0 && selectedTags.length === 0;
-      
+      // Only auto-fill if form is still empty (using memoized value)
       if (isFormEmpty) {
         const suggestions = processingItem.ai_suggestions;
         
@@ -283,7 +311,7 @@ export default function AddItemScreen() {
         setProcessingStage(null);
       }, processingStageConfig.complete.duration);
     }
-  }, [processingId, processingItem?.id, processingItem?.processing_status, processingItem?.ai_suggestions, processingItem?.image_clean, formData.title, selectedColors.length, selectedTags.length]);
+  }, [processingId, processingItem?.id, processingItem?.processing_status, processingItem?.ai_suggestions, processingItem?.image_clean, isFormEmpty]);
 
   // 🗑️ Helper: Remove photo and reset all state
   const handleRemovePhoto = () => {
@@ -537,26 +565,27 @@ export default function AddItemScreen() {
         
         // 🗑️ Delete temporary processing item if it exists
         if (processingId) {
-          try {
-            console.log('🗑️ DEBUG: Stopping polling for temporary item:', processingId);
-            const tempId = processingId;
-            
-            // 🛑 STOP POLLING FIRST - Set processingId to null to disable the polling query
-            setProcessingId(null);
-            
-            // ⏳ Wait a moment for React Query to process the state change
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            console.log('🗑️ DEBUG: Deleting temporary processing item:', tempId);
-            await deleteMutation.mutateAsync({
+          const tempId = processingId;
+          console.log('🗑️ DEBUG: Stopping polling and deleting temporary item:', tempId);
+          
+          // 🛑 STOP POLLING IMMEDIATELY - Disable the polling query
+          setProcessingId(null);
+          
+          // 🗑️ Delete in background without blocking the success flow
+          deleteMutation.mutate(
+            {
               userId: user.id,
               itemId: tempId,
-            });
-            console.log('🗑️ DEBUG: Temporary item deleted successfully');
-          } catch (deleteError) {
-            console.warn('⚠️ Failed to delete temporary processing item:', deleteError);
-            // Don't block the success flow if cleanup fails
-          }
+            },
+            {
+              onSuccess: () => {
+                console.log('🗑️ DEBUG: Temporary item deleted successfully');
+              },
+              onError: (deleteError) => {
+                console.warn('⚠️ Failed to delete temporary processing item:', deleteError);
+              },
+            }
+          );
         }
         
         Alert.alert(

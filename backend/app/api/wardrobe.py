@@ -107,7 +107,7 @@ def serialize_wardrobe_items(items: List[WardrobeItem]) -> List[dict]:
 
 
 @router.get("/")
-async def list_wardrobe_items(
+def list_wardrobe_items(
     skip: int = 0,
     limit: int = 100,
     category: Optional[str] = None,
@@ -154,7 +154,7 @@ def serialize_wardrobe_item(item: WardrobeItem) -> dict:
 
 
 @router.get("/{item_id}")
-async def get_wardrobe_item_by_id(
+def get_wardrobe_item_by_id(
     item_id: int,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id_for_testing)
@@ -258,6 +258,7 @@ async def process_image_endpoint(
         # Return processing ID for frontend to poll
         return {
             "processing_id": db_item.id,  # Frontend will poll /wardrobe/{id}
+            "image_original": image_base64,  # Return original for immediate display
             "processing_status": "pending",
         }
         
@@ -348,16 +349,17 @@ async def process_wardrobe_item_with_ai(
                 # Use same URL for both - we only keep the AI-enhanced version
                 item.image_original = s3_url
                 item.image_clean = s3_url
+                item.processing_status = ProcessingStatus.COMPLETED
                 db.commit()
+                logger.info(f"🤖 DEBUG: AI processing completed for item {item_id}")
             else:
-                logger.warning(f"🤖 DEBUG: Failed to upload enhanced image to S3")
+                item.processing_status = ProcessingStatus.FAILED
+                db.commit()
+                logger.warning(f"🤖 DEBUG: Marking item {item_id} as FAILED because no enhanced image was saved")
         else:
-            logger.warning(f"🤖 DEBUG: Failed to enhance image for item {item_id}")
-        
-        # Update status to COMPLETED
-        item.processing_status = ProcessingStatus.COMPLETED
-        db.commit()
-        logger.info(f"🤖 DEBUG: AI processing completed for item {item_id}")
+            item.processing_status = ProcessingStatus.FAILED
+            db.commit()
+            logger.warning(f"🤖 DEBUG: Marking item {item_id} as FAILED because no enhanced image was generated")
         
     except Exception as e:
         logger.error(f"🤖 DEBUG: Error in background AI processing for item {item_id}: {e}")
@@ -448,7 +450,12 @@ async def create_wardrobe_item_endpoint(
     
     # 🚀 CREATE ITEM IMMEDIATELY with processing_status='PENDING'
     logger.info("🤖 DEBUG: Creating database entry with PENDING status")
-    created_item = create_wardrobe_item(db, WardrobeItemCreate(**updated_item_data), user_id)
+    created_item = await run_in_threadpool(
+        create_wardrobe_item,
+        db,
+        WardrobeItemCreate(**updated_item_data),
+        user_id,
+    )
     logger.info(f"🤖 DEBUG: Item created with ID: {created_item.id}")
     
     # 🤖 SCHEDULE BACKGROUND AI PROCESSING if image provided
@@ -474,7 +481,7 @@ async def create_wardrobe_item_endpoint(
 
 
 @router.put("/{item_id}")
-async def update_wardrobe_item_by_id(
+def update_wardrobe_item_by_id(
     item_id: int,
     item_update: WardrobeItemUpdate,
     db: Session = Depends(get_db),
@@ -494,7 +501,7 @@ async def update_wardrobe_item_by_id(
 
 
 @router.patch("/{item_id}/status")
-async def update_wardrobe_item_status_endpoint(
+def update_wardrobe_item_status_endpoint(
     item_id: int,
     status_update: WardrobeItemStatusUpdate,
     db: Session = Depends(get_db),
@@ -518,7 +525,7 @@ async def update_wardrobe_item_status_endpoint(
 
 
 @router.delete("/{item_id}")
-async def delete_wardrobe_item_by_id(
+def delete_wardrobe_item_by_id(
     item_id: int,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id_for_testing)

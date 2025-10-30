@@ -58,6 +58,14 @@ async def process_virtual_tryon_with_ai(
     import httpx
     import base64
     import asyncio
+    import time
+    
+    # CRITICAL: Print to stdout IMMEDIATELY to verify background task is running
+    print(f"\n{'='*80}")
+    print(f"🚀 BACKGROUND TASK STARTED - Try-On ID: {tryon_id}")
+    print(f"User ID: {user_id}, Category: {item_category}, Colors: {item_colors}")
+    print(f"Use Clean BG: {use_clean_background}")
+    print(f"{'='*80}\n")
     
     # Create a new database session for the background task
     engine = create_engine(settings.DATABASE_URL)
@@ -65,7 +73,9 @@ async def process_virtual_tryon_with_ai(
     db = SessionLocal()
     
     try:
-        logger.info(f"🎨 Starting AI processing for virtual try-on ID {tryon_id}")
+        start_time = time.time()
+        print(f"⏱️ [0.0s] Starting AI processing for virtual try-on ID {tryon_id}")
+        logger.info(f"⏱️ [0.0s] Starting AI processing for virtual try-on ID {tryon_id}")
         
         # Update status to PROCESSING
         tryon_record = db.query(VirtualTryOnResult).filter(
@@ -79,8 +89,17 @@ async def process_virtual_tryon_with_ai(
         tryon_record.status = VirtualTryOnStatus.PROCESSING
         db.commit()
         
-        # Fetch both images from S3 in parallel
-        logger.info(f"📥 Fetching images from S3 in parallel...")
+        elapsed = time.time() - start_time
+        print(f"⏱️ [{elapsed:.1f}s] Status updated to PROCESSING")
+        logger.info(f"⏱️ [{elapsed:.1f}s] Status updated to PROCESSING")
+        
+        # Fetch both images from S3 in parallel (use compressed versions!)
+        print(f"📥 [{elapsed:.1f}s] Fetching COMPRESSED images from S3...")
+        print(f"   User: {user_image_url}")
+        print(f"   Item: {item_image_url}")
+        logger.info(f"📥 [{elapsed:.1f}s] Fetching images from S3 in parallel...")
+        fetch_start = time.time()
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             user_response, item_response = await asyncio.gather(
                 client.get(user_image_url),
@@ -89,13 +108,28 @@ async def process_virtual_tryon_with_ai(
             user_response.raise_for_status()
             item_response.raise_for_status()
         
+        fetch_elapsed = time.time() - fetch_start
+        total_elapsed = time.time() - start_time
+        
         # Convert to base64
+        user_image_size = len(user_response.content) / 1024 / 1024  # MB
+        item_image_size = len(item_response.content) / 1024 / 1024  # MB
+        print(f"⏱️ [{total_elapsed:.1f}s] S3 fetch took {fetch_elapsed:.1f}s")
+        print(f"📊 [{total_elapsed:.1f}s] Downloaded - User: {user_image_size:.2f}MB, Item: {item_image_size:.2f}MB")
+        logger.info(f"⏱️ [{total_elapsed:.1f}s] S3 fetch took {fetch_elapsed:.1f}s - User: {user_image_size:.2f}MB, Item: {item_image_size:.2f}MB")
+        
         user_image_base64 = base64.b64encode(user_response.content).decode('utf-8')
         item_image_base64 = base64.b64encode(item_response.content).decode('utf-8')
         
-        logger.info(f"✅ Fetched both images from S3")
+        total_elapsed = time.time() - start_time
+        print(f"✅ [{total_elapsed:.1f}s] Images fetched and converted to base64")
+        logger.info(f"✅ [{total_elapsed:.1f}s] Images fetched and converted to base64")
         
-        # Generate virtual try-on with Gemini (pass both base64 images)
+        # Generate virtual try-on with Gemini
+        print(f"🎨 [{total_elapsed:.1f}s] Calling Gemini API for virtual try-on...")
+        logger.info(f"🎨 [{total_elapsed:.1f}s] Calling Gemini API for virtual try-on...")
+        gemini_start = time.time()
+        
         result_image_base64 = await generate_virtual_tryon(
             user_image_base64=user_image_base64,
             item_image_base64=item_image_base64,
@@ -104,24 +138,52 @@ async def process_virtual_tryon_with_ai(
             use_clean_background=use_clean_background
         )
         
+        gemini_elapsed = time.time() - gemini_start
+        total_elapsed = time.time() - start_time
+        print(f"⏱️ [{total_elapsed:.1f}s] Gemini API took {gemini_elapsed:.1f}s")
+        logger.info(f"⏱️ [{total_elapsed:.1f}s] Gemini API took {gemini_elapsed:.1f}s")
+        
         if result_image_base64:
             # Upload result to S3 as PNG for higher quality (lossless)
             s3_key = f"virtual-tryon/{user_id}/tryon_{tryon_id}_result.png"
-            logger.info(f"📤 Uploading high-quality result to S3: {s3_key}")
+            print(f"📤 [{total_elapsed:.1f}s] Uploading result to S3: {s3_key}")
+            logger.info(f"📤 [{total_elapsed:.1f}s] Uploading result to S3: {s3_key}")
+            upload_start = time.time()
             
-            result_url = upload_file_from_base64(
-                base64_data=result_image_base64,
-                bucket_name=settings.AWS_S3_BUCKET_NAME,
-                object_name=s3_key,
-                content_type="image/png"
+            from fastapi.concurrency import run_in_threadpool
+            
+            result_url = await run_in_threadpool(
+                upload_file_from_base64,
+                result_image_base64,
+                settings.AWS_S3_BUCKET_NAME,
+                s3_key,
+                "image/png"
             )
+            
+            upload_elapsed = time.time() - upload_start
+            total_elapsed = time.time() - start_time
+            print(f"⏱️ [{total_elapsed:.1f}s] S3 upload took {upload_elapsed:.1f}s")
+            logger.info(f"⏱️ [{total_elapsed:.1f}s] S3 upload took {upload_elapsed:.1f}s")
+            
+            # Check if S3 upload succeeded
+            if not result_url:
+                tryon_record.status = VirtualTryOnStatus.FAILED
+                tryon_record.error_message = "Failed to upload virtual try-on result to S3"
+                db.commit()
+                print(f"❌ [{total_elapsed:.1f}s] Virtual try-on {tryon_id} failed during S3 upload")
+                logger.error(f"❌ [{total_elapsed:.1f}s] Virtual try-on {tryon_id} failed during S3 upload")
+                return
             
             # Update record with result
             tryon_record.result_image_url = result_url
             tryon_record.status = VirtualTryOnStatus.COMPLETED
             db.commit()
             
-            logger.info(f"✅ Virtual try-on {tryon_id} completed successfully")
+            total_elapsed = time.time() - start_time
+            print(f"✅ [{total_elapsed:.1f}s] Virtual try-on {tryon_id} completed successfully!")
+            print(f"📊 TIMING BREAKDOWN - S3 Fetch: {fetch_elapsed:.1f}s | Gemini: {gemini_elapsed:.1f}s | S3 Upload: {upload_elapsed:.1f}s | Total: {total_elapsed:.1f}s")
+            logger.info(f"✅ [{total_elapsed:.1f}s] Virtual try-on {tryon_id} completed successfully!")
+            logger.info(f"📊 TIMING BREAKDOWN - S3 Fetch: {fetch_elapsed:.1f}s | Gemini: {gemini_elapsed:.1f}s | S3 Upload: {upload_elapsed:.1f}s | Total: {total_elapsed:.1f}s")
         else:
             # Mark as failed
             tryon_record.status = VirtualTryOnStatus.FAILED

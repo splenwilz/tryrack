@@ -4,7 +4,7 @@ Background cleanup tasks for orphaned processing items.
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from app.models import WardrobeItem
+from app.models import WardrobeItem, ProcessingStatus
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ async def cleanup_old_processing_items(db: Session, hours_old: int = 1):
     Remove orphaned processing items older than specified hours.
     
     These items are created temporarily during AI processing.
-    If they're still in 'processing' category after 1 hour,
+    If they're still in 'processing' status after 1 hour,
     something went wrong and they should be deleted.
     
     Args:
@@ -23,9 +23,9 @@ async def cleanup_old_processing_items(db: Session, hours_old: int = 1):
     try:
         cutoff_time = datetime.utcnow() - timedelta(hours=hours_old)
         
-        # Find old processing items
+        # Find old processing items by processing_status, not category
         old_items = db.query(WardrobeItem).filter(
-            WardrobeItem.category == 'processing',
+            WardrobeItem.processing_status == ProcessingStatus.PROCESSING,
             WardrobeItem.created_at < cutoff_time
         ).all()
         

@@ -344,6 +344,16 @@ export default function VirtualTryOnScreen() {
       console.log('🏷️ Item type:', itemType || 'boutique');
       console.log('📸 User photo URL:', userPhoto);
       
+      // Validate that userPhoto is an S3 URL, not a local file URI
+      if (userPhoto.startsWith('file://')) {
+        Alert.alert(
+          'Invalid Photo',
+          'Please use your existing full-body photo from your profile. Newly captured photos are not yet supported for virtual try-on.'
+        );
+        setIsGenerating(false);
+        return;
+      }
+      
       // Prepare request (no base64 conversion needed!)
       const request = {
         user_image_url: userPhoto, // Already an S3 URL!
