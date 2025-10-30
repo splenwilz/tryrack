@@ -234,9 +234,7 @@ async def process_virtual_tryon_with_ai(
             logger.error(f"❌ Virtual try-on {tryon_id} failed")
             
     except Exception as e:
-        logger.error(f"❌ Error processing virtual try-on {tryon_id}: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.exception(f"❌ Error processing virtual try-on {tryon_id}: {e}")
         
         # Mark as failed
         try:
@@ -372,13 +370,11 @@ async def generate_virtual_tryon_endpoint(
         return VirtualTryOnResponse.model_validate(tryon_record)
         
     except Exception as e:
-        logger.error(f"❌ Error creating virtual try-on: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.exception(f"❌ Error creating virtual try-on: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create virtual try-on: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/{tryon_id}", response_model=VirtualTryOnResponse)
@@ -422,11 +418,11 @@ async def get_tryon_result(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error fetching virtual try-on {tryon_id}: {e}")
+        logger.exception(f"❌ Error fetching virtual try-on {tryon_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch virtual try-on: {str(e)}"
-        )
+        ) from e
 
 
 @router.delete("/{tryon_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -469,10 +465,10 @@ async def delete_tryon(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error deleting virtual try-on {tryon_id}: {e}")
+        logger.exception(f"❌ Error deleting virtual try-on {tryon_id}: {e}")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete virtual try-on: {str(e)}"
-        )
+        ) from e
 

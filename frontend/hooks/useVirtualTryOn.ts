@@ -4,6 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // Types
 export interface ItemDetails {
@@ -161,6 +162,14 @@ export async function convertImageToBase64(imageUri: string): Promise<string> {
     
     if (imageUri.startsWith('/9j/') || imageUri.startsWith('iVBOR')) {
       return imageUri; // Already base64
+    }
+    
+    // Handle local file:// URIs directly (fetch can't read file://)
+    if (imageUri.startsWith('file://')) {
+      const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: (FileSystem as any).EncodingType?.Base64 || 'base64',
+      });
+      return base64;
     }
     
     // Fetch the image and convert to base64
