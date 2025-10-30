@@ -13,8 +13,11 @@ export interface ItemDetails {
 }
 
 export interface VirtualTryOnRequest {
-  user_image_url: string; // S3 URL of user's full body image
-  item_image_url: string; // S3 URL of the item
+  // Prefer URLs when available; fall back to base64 for fresh photos
+  user_image_url?: string;
+  item_image_url?: string;
+  user_image_base64?: string;
+  item_image_base64?: string;
   item_details: ItemDetails;
   use_clean_background?: boolean; // Optional: default false (keep original background)
 }
@@ -27,6 +30,7 @@ export interface VirtualTryOnResult {
   user_image_url: string;
   item_image_url: string;
   result_image_url: string | null;
+  result_image_base64?: string | null;
   status: 'processing' | 'completed' | 'failed';
   error_message: string | null;
   created_at: string;
@@ -81,9 +85,12 @@ export function useVirtualTryOnResult(
     },
     enabled: enabled && tryonId !== null,
     refetchInterval: (query) => {
-      // Poll every 2 seconds while processing
-      const status = query.state.data?.status;
-      return status === 'processing' ? 2000 : false;
+      // Poll while processing, and also if completed but URL not yet set
+      const data = query.state.data as VirtualTryOnResult | undefined;
+      if (!data) return false;
+      if (data.status === 'processing') return 2000;
+      if (data.status === 'completed' && !data.result_image_url) return 2000;
+      return false;
     },
     retry: false, // Don't retry on errors (404 = deleted)
   });

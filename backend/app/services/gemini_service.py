@@ -3,6 +3,7 @@ Gemini AI Service for wardrobe image enhancement
 Using Gemini's native image generation (Nano Banana) to enhance wardrobe photos with stylish backgrounds
 """
 import base64
+import asyncio
 import logging
 import httpx
 import json
@@ -351,10 +352,24 @@ Return ONLY the final generated image with the person wearing the {item_category
         logger.info(f"🚀 [{elapsed:.1f}s] Sending request to Gemini 2.5 Flash Image API...")
         api_start = time.time()
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(api_url, headers=headers, json=payload)
-            response.raise_for_status()
-            result = response.json()
+        # Retry Gemini call to mitigate transient DNS/network hiccups
+        result = None
+        last_exc = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=90.0) as client:
+                    response = await client.post(api_url, headers=headers, json=payload)
+                    response.raise_for_status()
+                    result = response.json()
+                    last_exc = None
+                    break
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.HTTPError) as e:
+                last_exc = e
+                wait_s = 1.5 * (attempt + 1)
+                logger.warning(f"Gemini call attempt {attempt+1} failed: {e}. Retrying in {wait_s:.1f}s...")
+                await asyncio.sleep(wait_s)
+        if last_exc is not None:
+            raise last_exc
         
         api_elapsed = time.time() - api_start
         total_elapsed = time.time() - function_start

@@ -139,8 +139,11 @@ class ItemDetails(BaseModel):
 
 class VirtualTryOnRequest(BaseModel):
     """Request schema for generating virtual try-on."""
-    user_image_url: str  # S3 URL of user's full body image
-    item_image_url: str  # S3 URL or external URL
+    user_image_url: Optional[str] = None  # Prefer URL; fallback to base64
+    item_image_url: Optional[str] = None  # Prefer URL; fallback to base64
+    # Allow freshly captured images without first uploading
+    user_image_base64: Optional[str] = None
+    item_image_base64: Optional[str] = None
     item_details: ItemDetails
     use_clean_background: bool = False  # Default: keep original background
 
@@ -154,6 +157,7 @@ class VirtualTryOnResponse(BaseModel):
     user_image_url: str
     item_image_url: str
     result_image_url: Optional[str] = None
+    result_image_base64: Optional[str] = None
     status: str  # 'processing', 'completed', 'failed'
     error_message: Optional[str] = None
     created_at: datetime

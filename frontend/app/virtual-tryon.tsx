@@ -1,11 +1,13 @@
-import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions, ActivityIndicator, Animated, Easing, Share, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+// Use legacy API to access cacheDirectory and downloadAsync consistently
+import * as FileSystem from 'expo-file-system/legacy';
 import { useUser } from '@/hooks/useAuthQuery';
 import { useGenerateVirtualTryOn, useVirtualTryOnResult, convertImageToBase64 } from '@/hooks/useVirtualTryOn';
 import * as ImagePicker from 'expo-image-picker';
@@ -162,6 +164,9 @@ export default function VirtualTryOnScreen() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [tryonId, setTryonId] = useState<number | null>(null);
   const [useCleanBackground, setUseCleanBackground] = useState(false); // Toggle for clean background
+  const TARGET_WIDTH = 640;
+  const COMPRESS_QUALITY = 0.6;
+  const progressAnim = useRef(new Animated.Value(0)).current;
   
   // API hooks
   const generateMutation = useGenerateVirtualTryOn();
@@ -198,24 +203,44 @@ export default function VirtualTryOnScreen() {
   // Handle polling result updates
   useEffect(() => {
     if (!tryonResult) return;
-    
     console.log('📊 Try-on status:', tryonResult.status);
-    
-    if (tryonResult.status === 'completed' && tryonResult.result_image_url) {
-      setGeneratedImage(tryonResult.result_image_url);
-      setIsGenerating(false);
-      Alert.alert('Success!', 'Virtual try-on generated successfully!');
+
+    if (tryonResult.status === 'completed') {
+      const url = tryonResult.result_image_url;
+      const b64 = tryonResult.result_image_base64;
+      if (url) {
+        setGeneratedImage(url);
+        setIsGenerating(false);
+        Alert.alert('Success!', 'Virtual try-on generated successfully!');
+      } else if (b64) {
+        // Show base64 immediately; polling will continue until URL arrives
+        setGeneratedImage(`data:image/png;base64,${b64}`);
+        setIsGenerating(false);
+      }
     } else if (tryonResult.status === 'failed') {
       setIsGenerating(false);
-      Alert.alert(
-        'Generation Failed',
-        tryonResult.error_message || 'Failed to generate virtual try-on. Please try again.'
-      );
+      Alert.alert('Generation Failed', tryonResult.error_message || 'Failed to generate virtual try-on. Please try again.');
     } else if (tryonResult.status === 'processing') {
-      // Still processing, keep showing loading state
       setIsGenerating(true);
     }
   }, [tryonResult]);
+
+  // Simple animated loader while generating
+  useEffect(() => {
+    if (isGenerating) {
+      Animated.loop(
+        Animated.timing(progressAnim, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        })
+      ).start();
+    } else {
+      progressAnim.stopAnimation(() => progressAnim.setValue(0));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating, progressAnim]);
 
   const handleBackPress = () => {
     router.back();
@@ -253,8 +278,8 @@ export default function VirtualTryOnScreen() {
                 // Resize image to reduce size
                 const manipulatedImage = await ImageManipulator.manipulateAsync(
                   result.assets[0].uri,
-                  [{ resize: { width: 800 } }],
-                  { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+                  [{ resize: { width: TARGET_WIDTH } }],
+                  { compress: COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
                 );
                 
                 setUserPhoto(manipulatedImage.uri);
@@ -288,8 +313,8 @@ export default function VirtualTryOnScreen() {
                 // Resize image to reduce size
                 const manipulatedImage = await ImageManipulator.manipulateAsync(
                   result.assets[0].uri,
-                  [{ resize: { width: 800 } }],
-                  { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+                  [{ resize: { width: TARGET_WIDTH } }],
+                  { compress: COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
                 );
                 
                 setUserPhoto(manipulatedImage.uri);
@@ -330,6 +355,27 @@ export default function VirtualTryOnScreen() {
     }
   };
 
+  async function toCompressedBase64(uri: string): Promise<string> {
+    try {
+      let localUri = uri;
+      if (uri.startsWith('http')) {
+        const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+        const download = await FileSystem.downloadAsync(uri, `${cacheDir}tryon_${Date.now()}.jpg`);
+        localUri = download.uri;
+      }
+      const manipulated = await ImageManipulator.manipulateAsync(
+        localUri,
+        [{ resize: { width: TARGET_WIDTH } }],
+        { compress: COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      // manipulated.base64 is without data URI prefix
+      return manipulated.base64 || '';
+    } catch (e) {
+      // Fallback to non-compressed conversion
+      return await convertImageToBase64(uri);
+    }
+  }
+
   const handleGenerateTryOn = async () => {
     if (!selectedItem || !userPhoto || !user?.id) {
       Alert.alert('Missing Information', 'Please select both an item and your photo to generate virtual try-on');
@@ -344,20 +390,15 @@ export default function VirtualTryOnScreen() {
       console.log('🏷️ Item type:', itemType || 'boutique');
       console.log('📸 User photo URL:', userPhoto);
       
-      // Validate that userPhoto is an S3 URL, not a local file URI
-      if (userPhoto.startsWith('file://')) {
-        Alert.alert(
-          'Invalid Photo',
-          'Please use your existing full-body photo from your profile. Newly captured photos are not yet supported for virtual try-on.'
-        );
-        setIsGenerating(false);
-        return;
-      }
-      
-      // Prepare request (no base64 conversion needed!)
+      // Always send compressed base64 for both images to speed up Gemini
+      const user_image_base64 = await toCompressedBase64(userPhoto);
+      const item_image_base64 = selectedItem.imageUrl ? await toCompressedBase64(selectedItem.imageUrl) : undefined;
+
       const request = {
-        user_image_url: userPhoto, // Already an S3 URL!
-        item_image_url: selectedItem.imageUrl,
+        user_image_url: undefined,
+        item_image_url: undefined,
+        user_image_base64,
+        item_image_base64,
         item_details: {
           category: selectedItem.category,
           colors: selectedItem.colors || [],
@@ -395,8 +436,34 @@ export default function VirtualTryOnScreen() {
     Alert.alert('Save Result', 'Virtual try-on result saved to your gallery!');
   };
 
-  const handleShareResult = () => {
-    Alert.alert('Share Result', 'Share your virtual try-on result with friends!');
+  const handleShareResult = async () => {
+    try {
+      if (!generatedImage) {
+        Alert.alert('No Image', 'Generate a virtual try-on first.');
+        return;
+      }
+
+      let uriToShare = generatedImage;
+      // If base64, persist to a temp file and share the file URL
+      if (generatedImage.startsWith('data:image')) {
+        const b64 = generatedImage.split(',')[1] || '';
+        const cacheDir = (FileSystem as any).cacheDirectory || (FileSystem as any).documentDirectory || '';
+        const tempPath = `${cacheDir}tryon_share_${Date.now()}.png`;
+        await FileSystem.writeAsStringAsync(tempPath, b64, { encoding: (FileSystem as any).EncodingType?.Base64 || 'base64' });
+        uriToShare = tempPath;
+      }
+
+      // On Android, putting URL in message improves compatibility
+      const message = `My TryRack virtual try-on ✨\n${uriToShare}`;
+      await Share.share(
+        Platform.OS === 'android'
+          ? { message, title: 'TryRack' }
+          : { url: uriToShare, message: 'My TryRack virtual try-on ✨', title: 'TryRack' }
+      );
+    } catch (e) {
+      console.error('❌ Share failed:', e);
+      Alert.alert('Share Failed', 'Could not share the image. Please try again.');
+    }
   };
 
   if (!selectedItem) {
@@ -564,6 +631,22 @@ export default function VirtualTryOnScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {/* Engaging loader while AI is generating */}
+        {isGenerating && !generatedImage && (
+          <View style={styles.loaderSection}>
+            <ThemedText style={styles.loaderTitle}>Crafting your look...</ThemedText>
+            <View style={[styles.resultCard, { backgroundColor, alignItems: 'center' }]}> 
+              <Image
+                source={{ uri: 'https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif' }}
+                style={styles.characterAnimation}
+                resizeMode="contain"
+                accessibilityLabel="Walking character while we create your try-on"
+              />
+              <ThemedText style={styles.loaderCaption}>Hang tight — almost there</ThemedText>
+            </View>
+          </View>
+        )}
 
         {/* Generated Result */}
         {generatedImage && (
@@ -826,6 +909,44 @@ const styles = StyleSheet.create({
   resultActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+  },
+  loaderSection: {
+    marginBottom: 24,
+  },
+  loaderTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+    opacity: 0.8,
+  },
+  loaderImagePlaceholder: {
+    width: '100%',
+    height: 300,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginBottom: 12,
+  },
+  characterAnimation: {
+    width: '100%',
+    height: 220,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  progressBar: {
+    width: 80,
+    height: '100%',
+    borderRadius: 4,
+  },
+  loaderCaption: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginBottom: 4,
   },
   instructionsSection: {
     marginBottom: 24,
