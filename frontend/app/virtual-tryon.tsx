@@ -453,12 +453,20 @@ export default function VirtualTryOnScreen() {
         uriToShare = tempPath;
       }
 
-      // On Android, putting URL in message improves compatibility
-      const message = `My TryRack virtual try-on ✨\n${uriToShare}`;
+      // Android: convert local file path to content:// URI so the target app can read
+      let shareUrl = uriToShare;
+      if (Platform.OS === 'android' && !uriToShare.startsWith('http')) {
+        const toContent = (FileSystem as any).getContentUriAsync;
+        if (typeof toContent === 'function') {
+          shareUrl = await toContent(uriToShare);
+        }
+      }
+
+      const message = `My TryRack virtual try-on ✨\n${shareUrl}`;
       await Share.share(
         Platform.OS === 'android'
           ? { message, title: 'TryRack' }
-          : { url: uriToShare, message: 'My TryRack virtual try-on ✨', title: 'TryRack' }
+          : { url: shareUrl, message: 'My TryRack virtual try-on ✨', title: 'TryRack' }
       );
     } catch (e) {
       console.error('❌ Share failed:', e);

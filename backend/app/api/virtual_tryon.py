@@ -206,16 +206,25 @@ async def process_virtual_tryon_with_ai(
             print(f"⏱️ [{total_elapsed:.1f}s] S3 upload took {upload_elapsed:.1f}s")
             logger.info(f"⏱️ [{total_elapsed:.1f}s] S3 upload took {upload_elapsed:.1f}s")
             
-            # If S3 upload succeeded, update URL; otherwise keep base64-only completion
+            # If S3 upload succeeded, update URL; if it fails, mark FAILED and clear cache
             if result_url:
                 tryon_record.result_image_url = result_url
                 db.commit()
                 # Clear cached base64 once URL is available
                 TRYON_RESULT_CACHE.pop(tryon_id, None)
+            else:
+                tryon_record.status = VirtualTryOnStatus.FAILED
+                tryon_record.error_message = "Failed to upload virtual try-on result to S3"
+                db.commit()
+                TRYON_RESULT_CACHE.pop(tryon_id, None)
             
             total_elapsed = time.time() - start_time
-            print(f"✅ [{total_elapsed:.1f}s] Virtual try-on {tryon_id} completed. URL {'set' if result_url else 'pending'}.")
-            logger.info(f"✅ [{total_elapsed:.1f}s] Virtual try-on {tryon_id} completed. URL {'set' if result_url else 'pending'}.")
+            if result_url:
+                print(f"✅ [{total_elapsed:.1f}s] Virtual try-on {tryon_id} completed. URL set.")
+                logger.info(f"✅ [{total_elapsed:.1f}s] Virtual try-on {tryon_id} completed. URL set.")
+            else:
+                print(f"❌ [{total_elapsed:.1f}s] S3 upload failed; marked try-on {tryon_id} as FAILED.")
+                logger.error(f"❌ [{total_elapsed:.1f}s] S3 upload failed; marked try-on {tryon_id} as FAILED.")
         else:
             # Mark as failed
             tryon_record.status = VirtualTryOnStatus.FAILED
