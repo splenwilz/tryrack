@@ -222,10 +222,11 @@ export function useTryOnSuggestions(
   category: string | null,
   colors: string[] | null,
   userId: number,
+  itemId?: number | null, // Optional: ID of selected item to extract tags from
   enabled: boolean = true
 ) {
   return useQuery<TryOnSuggestionsResponse>({
-    queryKey: ['tryOnSuggestions', category, colors, userId],
+    queryKey: ['tryOnSuggestions', category, colors, userId, itemId],
     queryFn: async (): Promise<TryOnSuggestionsResponse> => {
       if (!category || !userId) {
         throw new Error('Category and userId are required');
@@ -239,6 +240,11 @@ export function useTryOnSuggestions(
       // Add colors if provided
       if (colors && colors.length > 0) {
         params.append('colors', colors.join(','));
+      }
+      
+      // Add item_id if provided (for tag extraction)
+      if (itemId) {
+        params.append('item_id', itemId.toString());
       }
       
       const response = await apiClient.get<TryOnSuggestionsResponse>(

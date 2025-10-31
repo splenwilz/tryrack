@@ -446,6 +446,7 @@ async def list_user_tryons(
 async def get_tryon_suggestions(
     category: str = Query(..., description="Category of item being tried on (e.g., 'top', 'bottom')"),
     colors: Optional[str] = Query(None, description="Comma-separated list of item colors (e.g., 'blue,white')"),
+    item_id: Optional[int] = Query(None, description="Optional wardrobe item ID to extract tags from"),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
@@ -463,12 +464,34 @@ async def get_tryon_suggestions(
     Example: GET /virtual-tryon/suggestions?category=top&colors=blue,white
     """
     try:
-        logger.info(f"🎯 Getting suggestions for category '{category}' for user {user_id}")
+        logger.info(f"🎯 Getting suggestions for category '{category}' for user {user_id}, item_id={item_id}")
         
         # Parse colors from query string
         item_colors = []
         if colors:
             item_colors = [c.strip() for c in colors.split(',') if c.strip()]
+        logger.info(f"🎯 Item colors: {item_colors}")
+        
+        # Extract tags from selected item if item_id provided
+        item_tags = []
+        if item_id:
+            try:
+                from app.services import get_wardrobe_item
+                logger.info(f"🔍 Fetching wardrobe item {item_id} for tag extraction...")
+                selected_item = get_wardrobe_item(db, item_id, user_id)
+                if selected_item:
+                    logger.info(f"✅ Found item {item_id}: {selected_item.title}, tags: {selected_item.tags}")
+                    if selected_item.tags:
+                        item_tags = selected_item.tags
+                        logger.info(f"📋 Extracted tags from item {item_id}: {item_tags}")
+                    else:
+                        logger.info(f"⚠️ Item {item_id} has no tags")
+                else:
+                    logger.warning(f"❌ Item {item_id} not found or not owned by user {user_id}")
+            except Exception as e:
+                logger.exception(f"❌ Could not extract tags from item {item_id}: {e}")
+        else:
+            logger.info(f"ℹ️ No item_id provided, will use empty tags for style compatibility")
         
         # Get user to access gender (optional for gender-aware suggestions)
         user = get_user(db, user_id)
@@ -499,6 +522,7 @@ async def get_tryon_suggestions(
         compatible_items = get_compatible_items(
             item_category=category,
             item_colors=item_colors,
+            item_tags=item_tags,  # Pass tags from selected item
             wardrobe_items=wardrobe_items,
             user_gender=user.gender
         )

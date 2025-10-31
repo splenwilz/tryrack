@@ -238,7 +238,8 @@ def get_compatible_items(
     item_category: str,
     item_colors: List[str],
     wardrobe_items: List[WardrobeItem],
-    user_gender: Optional[str] = None
+    user_gender: Optional[str] = None,
+    item_tags: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
     """Get compatible wardrobe items for a given item being tried on.
     
@@ -252,6 +253,7 @@ def get_compatible_items(
         item_colors: Colors of item being tried on
         wardrobe_items: List of user's wardrobe items to check
         user_gender: Optional user gender for gender-aware filtering
+        item_tags: Optional tags from the item being tried on (for style matching)
         
     Returns:
         List of compatible items with compatibility scores, sorted by score (highest first).
@@ -282,7 +284,8 @@ def get_compatible_items(
     # Also normalize the compatible categories to handle all variations
     # For example, compatible_categories might be ["bottom"], but we need to check for "jeans", "chino", etc.
     compatible_items = []
-    item_tags = []  # Will be populated if we have tag info from the item
+    # Use provided item_tags, or empty list if not provided
+    item_tags = item_tags or []
     
     for wardrobe_item in wardrobe_items:
         # Normalize wardrobe item category
@@ -310,6 +313,12 @@ def get_compatible_items(
         
         # Weighted average: color is more important than style
         compatibility_score = (color_score * 0.7) + (style_score * 0.3)
+        
+        logger.info(f"Compatibility for item {wardrobe_item.id} ({wardrobe_item.title}): "
+                   f"color_score={color_score:.2f}, style_score={style_score:.2f}, "
+                   f"compatibility_score={compatibility_score:.2f} "
+                   f"(item_colors={item_colors}, wardrobe_colors={wardrobe_item.colors}, "
+                   f"item_tags={item_tags}, wardrobe_tags={wardrobe_item.tags})")
         
         # Build reasons for compatibility
         reasons = []

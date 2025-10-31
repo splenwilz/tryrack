@@ -1,11 +1,13 @@
-import React from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useMemo } from 'react';
+import { StyleSheet, View, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router } from 'expo-router';
+import { useStyleInsights } from '@/hooks/useStyleInsights';
+import type { StyleInsights } from '@/hooks/useStyleInsights';
 
 // Style Insight interface
 interface StyleInsight {
@@ -20,84 +22,152 @@ interface StyleInsight {
   tips: string[];
 }
 
-// Extended mock data for comprehensive style insights
-const mockStyleInsights: StyleInsight[] = [
-  {
-    id: '1',
-    title: 'Style Evolution',
-    description: 'Your style has evolved 23% this month',
-    value: '+23%',
-    trend: 'up',
-    icon: 'arrow.up',
-    category: 'evolution',
-    detailedDescription: 'Your fashion sense has significantly improved this month. You\'ve been experimenting with new combinations and stepping out of your comfort zone.',
-    tips: [
-      'Try mixing different textures',
-      'Experiment with color combinations',
-      'Accessorize more frequently'
-    ]
-  },
-  {
-    id: '2',
-    title: 'Color Palette',
-    description: 'Black is your most worn color',
-    value: '42%',
-    trend: 'stable',
-    icon: 'paintpalette',
-    category: 'color',
-    detailedDescription: 'Black dominates your wardrobe at 42%, followed by navy (18%) and white (15%). This creates a sophisticated, timeless look.',
-    tips: [
-      'Add more colorful accessories',
-      'Try earth tones for variety',
-      'Consider seasonal color trends'
-    ]
-  },
-  {
-    id: '3',
-    title: 'Sustainability',
-    description: 'You\'re 15% more sustainable than last month',
-    value: '85%',
-    trend: 'up',
-    icon: 'leaf',
-    category: 'sustainability',
-    detailedDescription: 'Your sustainable fashion choices have improved significantly. You\'re choosing quality over quantity and supporting eco-friendly brands.',
-    tips: [
-      'Continue buying second-hand items',
-      'Support local sustainable brands',
-      'Learn about fabric sustainability'
-    ]
-  },
-  {
-    id: '5',
-    title: 'Style Preferences',
-    description: 'Minimalist style is your favorite',
-    value: '78%',
-    trend: 'stable',
-    icon: 'heart.fill',
-    category: 'preferences',
-    detailedDescription: 'Your style leans heavily towards minimalism with clean lines, neutral colors, and simple silhouettes.',
-    tips: [
+// Transform API data into UI format
+function transformInsightsData(data: StyleInsights | undefined): StyleInsight[] {
+  if (!data) return [];
+  
+  const insights: StyleInsight[] = [];
+  
+  // Style Preferences - get the highest percentage style
+  const stylePreferences = data.style_preferences || {};
+  const topStyle = Object.entries(stylePreferences)
+    .sort(([, a], [, b]) => (b as number) - (a as number))[0];
+  
+  if (topStyle) {
+    const [styleName, percentage] = topStyle;
+    insights.push({
+      id: 'style-preferences',
+      title: 'Style Preferences',
+      description: `${styleName.charAt(0).toUpperCase() + styleName.slice(1)} style is your favorite`,
+      value: `${Math.round(percentage as number)}%`,
+      trend: 'stable',
+      icon: 'heart.fill',
+      category: 'preferences',
+      detailedDescription: `Your style leans heavily towards ${styleName} with ${percentage}% of your wardrobe items matching this aesthetic.`,
+      tips: getStyleTips(styleName)
+    });
+  }
+  
+  // Color Palette - top color
+  const colorPalette = data.color_palette || [];
+  if (colorPalette.length > 0) {
+    const topColor = colorPalette[0];
+    const secondColor = colorPalette[1];
+    const thirdColor = colorPalette[2];
+    
+    let description = `${topColor.color} is your most worn color`;
+    let detailedDescription = `${topColor.color} dominates your wardrobe at ${topColor.percentage}%`;
+    
+    if (secondColor) {
+      description += ` (${secondColor.color} ${secondColor.percentage}%)`;
+      detailedDescription += `, followed by ${secondColor.color} (${secondColor.percentage}%)`;
+    }
+    if (thirdColor) {
+      detailedDescription += ` and ${thirdColor.color} (${thirdColor.percentage}%)`;
+    }
+    detailedDescription += '. This creates a sophisticated, timeless look.';
+    
+    insights.push({
+      id: 'color-palette',
+      title: 'Color Palette',
+      description,
+      value: `${Math.round(topColor.percentage)}%`,
+      trend: 'stable',
+      icon: 'paintpalette',
+      category: 'color',
+      detailedDescription,
+      tips: [
+        'Add more colorful accessories',
+        'Try earth tones for variety',
+        'Consider seasonal color trends'
+      ]
+    });
+  }
+  
+  // Style Evolution
+  if (data.style_evolution?.changes) {
+    const changes = data.style_evolution.changes;
+    const significantChanges = Object.entries(changes)
+      .filter(([, change]) => Math.abs(change.change) >= 10)
+      .sort(([, a], [, b]) => Math.abs(b.change) - Math.abs(a.change));
+    
+    if (significantChanges.length > 0) {
+      const [styleName, changeData] = significantChanges[0];
+      const trend = changeData.trend === 'up' ? 'up' : changeData.trend === 'down' ? 'down' : 'stable';
+      const changeValue = Math.abs(changeData.change);
+      
+      insights.push({
+        id: 'style-evolution',
+        title: 'Style Evolution',
+        description: `Your ${styleName} style has ${trend === 'up' ? 'grown' : trend === 'down' ? 'decreased' : 'stayed stable'} ${changeValue}% this month`,
+        value: trend === 'up' ? `+${Math.round(changeValue)}%` : trend === 'down' ? `-${Math.round(changeValue)}%` : '0%',
+        trend,
+        icon: 'arrow.up',
+        category: 'evolution',
+        detailedDescription: `Your fashion sense has ${trend === 'up' ? 'significantly improved' : trend === 'down' ? 'shifted' : 'remained consistent'} this month. You've been experimenting with new combinations and stepping out of your comfort zone.`,
+        tips: [
+          'Try mixing different textures',
+          'Experiment with color combinations',
+          'Accessorize more frequently'
+        ]
+      });
+    }
+  }
+  
+  // Formality Profile
+  if (data.average_formality > 0) {
+    const formalityLevel = data.average_formality >= 70 ? 'formal' : data.average_formality >= 40 ? 'casual' : 'very casual';
+    insights.push({
+      id: 'formality-profile',
+      title: 'Formality Profile',
+      description: `Your wardrobe is ${formalityLevel}`,
+      value: `${Math.round(data.average_formality)}%`,
+      trend: 'stable',
+      icon: 'briefcase.fill',
+      category: 'preferences',
+      detailedDescription: `Your average formality score is ${Math.round(data.average_formality)}%, indicating a ${formalityLevel} style preference.`,
+      tips: [
+        data.average_formality >= 70 ? 'Try adding some casual pieces' : 'Add more formal items for versatility',
+        'Balance professional and personal style',
+        'Consider occasion-appropriate dressing'
+      ]
+    });
+  }
+  
+  return insights;
+}
+
+// Helper function for style-specific tips
+function getStyleTips(styleName: string): string[] {
+  const tipsMap: Record<string, string[]> = {
+    minimalist: [
       'Invest in quality basics',
       'Focus on fit over trends',
       'Build a capsule wardrobe'
-    ]
-  },
-  {
-    id: '6',
-    title: 'Occasion Dressing',
-    description: 'Work outfits are your strength',
-    value: '92%',
-    trend: 'up',
-    icon: 'briefcase.fill',
-    category: 'preferences',
-    detailedDescription: 'You excel at professional dressing with a 92% success rate for work-appropriate outfits.',
-    tips: [
-      'Add more statement pieces',
+    ],
+    formal: [
+      'Add statement accessories',
       'Experiment with casual looks',
       'Balance professional and personal style'
+    ],
+    casual: [
+      'Add versatile pieces',
+      'Try mixing casual and formal',
+      'Build a cohesive wardrobe'
+    ],
+    elegant: [
+      'Focus on quality materials',
+      'Invest in timeless pieces',
+      'Perfect your fit'
     ]
-  }
-];
+  };
+  
+  return tipsMap[styleName] || [
+    'Experiment with new combinations',
+    'Try different styles',
+    'Build a cohesive wardrobe'
+  ];
+}
 
 // Style Insight Card Component
 const StyleInsightCard: React.FC<{ insight: StyleInsight }> = ({ insight }) => {
@@ -208,9 +278,24 @@ export default function StyleInsightsScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const [selectedCategory, setSelectedCategory] = React.useState('all');
   
+  // Fetch style insights from API
+  const { data: insightsData, isLoading, error } = useStyleInsights();
+  
+  // Transform API data to UI format
+  const styleInsights = useMemo(() => {
+    if (__DEV__) {
+      console.log('🔄 Transforming insights data:', insightsData);
+    }
+    const transformed = transformInsightsData(insightsData);
+    if (__DEV__) {
+      console.log('✅ Transformed insights:', transformed);
+    }
+    return transformed;
+  }, [insightsData]);
+  
   const filteredInsights = selectedCategory === 'all' 
-    ? mockStyleInsights 
-    : mockStyleInsights.filter(insight => insight.category === selectedCategory);
+    ? styleInsights 
+    : styleInsights.filter(insight => insight.category === selectedCategory);
 
   const handleBackPress = () => {
     router.back();
@@ -241,12 +326,40 @@ export default function StyleInsightsScreen() {
           onCategoryChange={setSelectedCategory}
         />
 
+        {/* Loading State */}
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={tintColor} />
+            <ThemedText style={styles.loadingText}>Analyzing your style...</ThemedText>
+          </View>
+        )}
+
+        {/* Error State */}
+        {error && !isLoading && (
+          <View style={styles.errorContainer}>
+            <ThemedText style={styles.errorText}>
+              Unable to load style insights. Please try again later.
+            </ThemedText>
+          </View>
+        )}
+
+        {/* Empty State */}
+        {!isLoading && !error && filteredInsights.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <ThemedText style={styles.emptyText}>
+              No style insights available yet. Add items to your wardrobe to see your style analysis.
+            </ThemedText>
+          </View>
+        )}
+
         {/* Insights List */}
-        <View style={styles.insightsList}>
-          {filteredInsights.map((insight) => (
-            <StyleInsightCard key={insight.id} insight={insight} />
-          ))}
-        </View>
+        {!isLoading && !error && filteredInsights.length > 0 && (
+          <View style={styles.insightsList}>
+            {filteredInsights.map((insight) => (
+              <StyleInsightCard key={insight.id} insight={insight} />
+            ))}
+          </View>
+        )}
 
         {/* Summary Section */}
         <View style={[styles.summaryCard, { backgroundColor }]}>
@@ -410,5 +523,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  loadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  errorContainer: {
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  emptyContainer: {
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.7,
+    lineHeight: 20,
   },
 });

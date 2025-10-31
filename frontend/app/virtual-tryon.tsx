@@ -33,7 +33,7 @@ interface BoutiqueItem {
 
 // Wardrobe item interface
 interface WardrobeItemTryOn {
-  id: string;
+  id: string | number; // Can be string or number depending on source (API returns number)
   title: string;
   category: string;
   imageUrl: string;
@@ -183,11 +183,22 @@ export default function VirtualTryOnScreen() {
   // Backward compatibility: use first item for UI display (legacy code references)
   const selectedItem = selectedItems[0] || null;
   
+  // Extract item ID if it's a wardrobe item (for tag extraction)
+  // Handle both string and number IDs (API returns number, but interface might be string)
+  const selectedItemId = selectedItem && 'id' in selectedItem
+    ? (typeof selectedItem.id === 'number' 
+        ? selectedItem.id 
+        : (typeof selectedItem.id === 'string' && !isNaN(Number(selectedItem.id))
+            ? Number(selectedItem.id)
+            : null))
+    : null;
+  
   // Suggestions: fetch compatible items when first item is selected
   const { data: suggestionsData, isLoading: isLoadingSuggestions } = useTryOnSuggestions(
     selectedItem?.category || null,
     selectedItem?.colors || null,
     user?.id ?? 0,
+    selectedItemId, // Pass item ID to extract tags for better compatibility scoring
     !!selectedItem && user?.id ? true : false
   );
   
@@ -197,12 +208,15 @@ export default function VirtualTryOnScreen() {
       console.log('🔍 Suggestions Debug:', {
         category: selectedItem.category,
         colors: selectedItem.colors,
+        selectedItemId,
+        itemId: selectedItem.id,
+        itemIdType: typeof selectedItem.id,
         userId: user?.id,
         suggestionsData,
         isLoading: isLoadingSuggestions
       });
     }
-  }, [selectedItem, suggestionsData, isLoadingSuggestions, user?.id]);
+  }, [selectedItem, selectedItemId, suggestionsData, isLoadingSuggestions, user?.id]);
 
   // Find the selected item and initialize selectedItems array
   useEffect(() => {
@@ -285,12 +299,17 @@ export default function VirtualTryOnScreen() {
     router.back();
   };
 
+  // Helper function to infer item type
+  const inferItemType = (item: BoutiqueItem | WardrobeItemTryOn): 'wardrobe' | 'boutique' => {
+    return 'boutique' in item ? 'boutique' : 'wardrobe';
+  };
+
   // Helper functions for multi-item management
   const addItemToTryOn = (item: BoutiqueItem | WardrobeItemTryOn) => {
     // Check if item is already selected (infer type same way as in request payload)
+    const candidateType = inferItemType(item);
     const isAlreadySelected = selectedItems.some((selected) => {
-      const selectedType = 'boutique' in selected ? 'boutique' : 'wardrobe';
-      const candidateType = 'boutique' in item ? 'boutique' : 'wardrobe';
+      const selectedType = inferItemType(selected);
       return selected.id === item.id && selectedType === candidateType;
     });
     
@@ -300,16 +319,24 @@ export default function VirtualTryOnScreen() {
     }
     
     // Limit to 5 items max
-    if (selectedItems.length >= 5) {
-      Alert.alert('Limit Reached', 'You can try on up to 5 items at once.');
-      return;
-    }
-    
-    setSelectedItems([...selectedItems, item]);
+    // Use functional update to prevent stale state issues
+    setSelectedItems((prev) => {
+      if (prev.length >= 5) {
+        Alert.alert('Limit Reached', 'You can try on up to 5 items at once.');
+        return prev;
+      }
+      return [...prev, item];
+    });
   };
 
-  const removeItemFromTryOn = (itemId: string) => {
-    setSelectedItems(selectedItems.filter(item => item.id !== itemId));
+  const removeItemFromTryOn = (itemToRemove: BoutiqueItem | WardrobeItemTryOn) => {
+    const targetType = inferItemType(itemToRemove);
+    // Use functional update and match by both ID and source type to prevent removing wrong source
+    setSelectedItems((prev) => 
+      prev.filter((item) => 
+        item.id !== itemToRemove.id || inferItemType(item) !== targetType
+      )
+    );
   };
 
   const handleUseExistingPhoto = () => {
@@ -463,11 +490,6 @@ export default function VirtualTryOnScreen() {
       // Always send compressed base64 for user image
       const user_image_base64 = await toCompressedBase64(userPhoto);
       
-      // Infer item type per item: boutique items have 'boutique' property, wardrobe items don't
-      const inferItemType = (item: BoutiqueItem | WardrobeItemTryOn): 'wardrobe' | 'boutique' => {
-        return 'boutique' in item ? 'boutique' : 'wardrobe';
-      };
-      
       // Prepare item_details array for multi-item support
       const item_details: ItemDetails[] = await Promise.all(
         selectedItems.map(async (item) => {
@@ -475,7 +497,7 @@ export default function VirtualTryOnScreen() {
             category: item.category,
             colors: item.colors || [],
             type: inferItemType(item),
-            item_id: item.id,
+            item_id: String(item.id),
           };
         })
       );
@@ -620,7 +642,7 @@ export default function VirtualTryOnScreen() {
                 {selectedItems.length > 1 && (
                   <TouchableOpacity
                     style={styles.removeItemButton}
-                    onPress={() => removeItemFromTryOn(item.id)}
+                    onPress={() => removeItemFromTryOn(item)}
                   >
                     <IconSymbol name="xmark.circle.fill" size={20} color="#ff4444" />
                   </TouchableOpacity>

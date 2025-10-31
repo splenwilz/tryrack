@@ -220,3 +220,22 @@ class VirtualTryOnCreate(BaseModel):
     item_id: str
     user_image_url: str
     item_image_url: str
+
+
+class StyleEvolutionChange(BaseModel):
+    """Schema for style evolution change data."""
+    recent_percentage: float
+    previous_percentage: float
+    change: float
+    trend: str  # 'up', 'down', 'stable'
+
+
+class StyleInsightsResponse(BaseModel):
+    """Response schema for style insights."""
+    style_preferences: Dict[str, float]  # Style keyword -> percentage
+    color_palette: List[Dict[str, Any]]  # [{"color": "black", "percentage": 42.0}, ...]
+    category_distribution: Dict[str, float]  # Category -> percentage
+    average_formality: float  # Average formality as percentage (0-100)
+    style_evolution: Optional[Dict[str, Any]] = None  # Evolution data if available
+    
+    model_config = ConfigDict(from_attributes=True)

@@ -1,4 +1,4 @@
-import { useState, type FC } from 'react';
+import { useState, type FC, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,9 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
+import { useStyleInsights } from '@/hooks/useStyleInsights';
+import type { StyleInsights } from '@/hooks/useStyleInsights';
+import { queryClient } from '@/lib/query-client';
 
 // Type definitions
 interface User {
@@ -87,33 +90,7 @@ interface FashionStats {
   itemsAddedThisMonth: number;
 }
 
-// Mock data for enhanced profile features
-const mockStyleInsights: StyleInsight[] = [
-  {
-    id: '1',
-    title: 'Style Evolution',
-    description: 'Your style has evolved 23% this month',
-    value: '+23%',
-    trend: 'up',
-    icon: 'arrow.up'
-  },
-  {
-    id: '2',
-    title: 'Color Palette',
-    description: 'Black is your most worn color',
-    value: '42%',
-    trend: 'stable',
-    icon: 'paintpalette'
-  },
-  {
-    id: '3',
-    title: 'Sustainability',
-    description: 'You\'re 15% more sustainable than last month',
-    value: '85%',
-    trend: 'up',
-    icon: 'leaf'
-  }
-];
+// Mock data for enhanced profile features (mockStyleInsights removed - using API data instead)
 
 const mockOutfitHistory: OutfitHistory[] = [
   {
@@ -306,44 +283,134 @@ const PersonalDetailsSection: FC<{ user: User | null; colors: ColorScheme }> = (
 };
 
 /**
+ * Transform API insights to profile preview format
+ */
+function transformInsightsForProfile(data: StyleInsights | undefined): StyleInsight[] {
+  if (!data) return [];
+  
+  const insights: StyleInsight[] = [];
+  
+  // Style Preferences - top style
+  const stylePreferences = data.style_preferences || {};
+  const topStyle = Object.entries(stylePreferences)
+    .sort(([, a], [, b]) => (b as number) - (a as number))[0];
+  
+  if (topStyle) {
+    const [styleName, percentage] = topStyle;
+    insights.push({
+      id: 'style-preferences',
+      title: 'Style Preferences',
+      description: `${styleName.charAt(0).toUpperCase() + styleName.slice(1)} style`,
+      value: `${Math.round(percentage as number)}%`,
+      trend: 'stable',
+      icon: 'arrow.up'
+    });
+  }
+  
+  // Color Palette - top color
+  const colorPalette = data.color_palette || [];
+  if (colorPalette.length > 0) {
+    const topColor = colorPalette[0];
+    insights.push({
+      id: 'color-palette',
+      title: 'Color Palette',
+      description: `${topColor.color} is your top color`,
+      value: `${Math.round(topColor.percentage)}%`,
+      trend: 'stable',
+      icon: 'paintpalette'
+    });
+  }
+  
+  // Formality Profile
+  if (data.average_formality > 0) {
+    insights.push({
+      id: 'formality',
+      title: 'Formality',
+      description: `Average formality score`,
+      value: `${Math.round(data.average_formality)}%`,
+      trend: 'stable',
+      icon: 'leaf'
+    });
+  }
+  
+  return insights.slice(0, 3); // Show max 3 insights in preview
+}
+
+/**
  * Style Insights Section
  * Shows AI-powered style analytics and trends
  */
-const StyleInsightsSection: FC<{ colors: ColorScheme }> = ({ colors }) => (
-  <View style={[styles.section, { backgroundColor: colors.background }]}>
-    <View style={styles.sectionHeader}>
-      <ThemedText type="subtitle" style={styles.sectionTitle}>
-        Style Insights
-      </ThemedText>
-      <TouchableOpacity onPress={() => router.push('/style-insights')}>
-        <ThemedText style={[styles.viewAllText, { color: colors.tint }]}>
-          View All
+const StyleInsightsSection: FC<{ colors: ColorScheme }> = ({ colors }) => {
+  const { data: insightsData, isLoading, error, refetch } = useStyleInsights();
+  
+  // Force clear cache and refetch on mount to bypass persisted cache
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('🔄 Profile: Mounted, clearing cache and forcing style insights refetch');
+    }
+    // Clear the query cache for style-insights
+    queryClient.removeQueries({ queryKey: ['style-insights'] });
+    // Force refetch
+    refetch();
+  }, [refetch]);
+  
+  const profileInsights = useMemo(() => {
+    if (__DEV__) {
+      console.log('🔄 Profile: Transforming insights data:', insightsData);
+      console.log('🔄 Profile: isLoading:', isLoading, 'error:', error);
+    }
+    const transformed = transformInsightsForProfile(insightsData);
+    if (__DEV__) {
+      console.log('✅ Profile: Transformed insights:', JSON.stringify(transformed, null, 2));
+      transformed.forEach((insight, idx) => {
+        console.log(`✅ Profile: Insight ${idx}: ${insight.title} = ${insight.value}`);
+      });
+    }
+    return transformed;
+  }, [insightsData, isLoading, error]);
+  
+  return (
+    <View style={[styles.section, { backgroundColor: colors.background }]}>
+      <View style={styles.sectionHeader}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Style Insights
         </ThemedText>
-      </TouchableOpacity>
-    </View>
-    
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightsScroll}>
-      {mockStyleInsights.map((insight) => (
-        <View key={insight.id} style={[styles.insightCard, { backgroundColor: colors.background }]}>
-          <View style={styles.insightHeader}>
-            <IconSymbol 
-              name={insight.icon}
-              size={20} 
-              color={insight.trend === 'up' ? '#4CAF50' : insight.trend === 'down' ? '#FF5722' : colors.tint} 
-            />
-            <ThemedText style={[styles.insightValue, { color: colors.tint }]}>
-              {insight.value}
-            </ThemedText>
-          </View>
-          <ThemedText style={styles.insightTitle}>{insight.title}</ThemedText>
-          <ThemedText style={[styles.insightDescription, { color: colors.tabIconDefault }]}>
-            {insight.description}
+        <TouchableOpacity onPress={() => router.push('/style-insights')}>
+          <ThemedText style={[styles.viewAllText, { color: colors.tint }]}>
+            View All
           </ThemedText>
-        </View>
-      ))}
-    </ScrollView>
-  </View>
-);
+        </TouchableOpacity>
+      </View>
+      
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightsScroll}>
+        {profileInsights.length > 0 ? (
+          profileInsights.map((insight) => (
+            <View key={insight.id} style={[styles.insightCard, { backgroundColor: colors.background }]}>
+              <View style={styles.insightHeader}>
+                <IconSymbol 
+                  name={insight.icon}
+                  size={20} 
+                  color={insight.trend === 'up' ? '#4CAF50' : insight.trend === 'down' ? '#FF5722' : colors.tint} 
+                />
+                <ThemedText style={[styles.insightValue, { color: colors.tint }]}>
+                  {insight.value}
+                </ThemedText>
+              </View>
+              <ThemedText style={styles.insightTitle}>{insight.title}</ThemedText>
+              <ThemedText style={[styles.insightDescription, { color: colors.tabIconDefault }]}>
+                {insight.description}
+              </ThemedText>
+            </View>
+          ))
+        ) : (
+          <ThemedText style={[styles.insightDescription, { color: colors.tabIconDefault, textAlign: 'center', paddingHorizontal: 20 }]}>
+            Add items to your wardrobe to see style insights
+          </ThemedText>
+        )}
+      </ScrollView>
+    </View>
+  );
+};
 
 /**
  * Fashion Statistics Section
