@@ -6,6 +6,7 @@ import time
 from starlette.concurrency import run_in_threadpool
 
 from app.db import get_db
+from app.core.auth import get_current_user_id
 from app.models import WardrobeItem, ProcessingStatus
 from app.schemas import WardrobeItemResponse, WardrobeItemCreate, WardrobeItemUpdate, WardrobeItemStatusUpdate
 from app.services import (
@@ -23,7 +24,11 @@ from app.services.gemini_service import remove_background, extract_item_metadata
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/wardrobe", tags=["wardrobe"])
+router = APIRouter(
+    prefix="/wardrobe",
+    tags=["wardrobe"],
+    dependencies=[Depends(get_current_user_id)],
+)
 
 
 def parse_mime_and_ext(data_url: str) -> tuple[str, str]:
@@ -56,26 +61,6 @@ def parse_mime_and_ext(data_url: str) -> tuple[str, str]:
         return 'image/jpeg', 'jpg'
     
     return mime, ext
-
-
-def get_current_user_id_for_testing(
-    user_id: int = Query(1, description="Test user ID for development")
-):
-    """
-    Get current user ID - for testing without auth.
-    
-    ⚠️ DEV-ONLY: This function is a security risk in production!
-    It allows any caller to access any user's data by changing the user_id parameter.
-    Replace with proper JWT authentication before deploying to production.
-    """
-    # Guard to prevent accidental production exposure
-    if settings.ENVIRONMENT.lower() not in ("dev", "development", "local"):
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Auth required in production"
-        )
-    
-    return user_id
 
 
 def serialize_wardrobe_items(items: List[WardrobeItem]) -> List[dict]:
@@ -113,7 +98,7 @@ def list_wardrobe_items(
     category: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     Get all wardrobe items for the current user.
@@ -157,7 +142,7 @@ def serialize_wardrobe_item(item: WardrobeItem) -> dict:
 def get_wardrobe_item_by_id(
     item_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """Get a specific wardrobe item by ID."""
     item = get_wardrobe_item(db, item_id, user_id)
@@ -176,7 +161,7 @@ async def process_image_endpoint(
     image_data: dict,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     🎨 NEW: Process image immediately when user picks it (BEFORE saving to wardrobe).
@@ -388,7 +373,7 @@ async def create_wardrobe_item_endpoint(
     item: WardrobeItemCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     🚀 Create a new wardrobe item with IMMEDIATE SAVE + BACKGROUND AI PROCESSING.
@@ -485,7 +470,7 @@ def update_wardrobe_item_by_id(
     item_id: int,
     item_update: WardrobeItemUpdate,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """Update a wardrobe item."""
     item = get_wardrobe_item(db, item_id, user_id)
@@ -505,7 +490,7 @@ def update_wardrobe_item_status_endpoint(
     item_id: int,
     status_update: WardrobeItemStatusUpdate,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """Update wardrobe item status (clean, worn, dirty)."""
     item = get_wardrobe_item(db, item_id, user_id)
@@ -528,7 +513,7 @@ def update_wardrobe_item_status_endpoint(
 def delete_wardrobe_item_by_id(
     item_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """Delete a wardrobe item."""
     item = get_wardrobe_item(db, item_id, user_id)

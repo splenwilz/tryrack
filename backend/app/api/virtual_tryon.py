@@ -8,36 +8,18 @@ import logging
 from typing import Optional, List, Dict
 
 from app.db import get_db, SessionLocal
+from app.core.auth import get_current_user_id
 from app.schemas import VirtualTryOnRequest, VirtualTryOnResponse
 from app.models import VirtualTryOnResult, VirtualTryOnStatus
 from app.services.gemini_service import generate_virtual_tryon
 from app.services.s3_service import upload_file_from_base64  # Only used for result upload
 from app.core.config import settings
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_id)])
 logger = logging.getLogger(__name__)
 
 # In-memory, short-lived cache to return base64 immediately on completion
 TRYON_RESULT_CACHE: Dict[int, str] = {}
-
-def get_current_user_id_for_testing(
-    user_id: int = Query(4, description="Test user ID for development")
-):
-    """
-    Get current user ID - for testing without auth.
-    
-    ⚠️ DEV-ONLY: This function is a security risk in production!
-    It allows any caller to access any user's data by changing the user_id parameter.
-    Replace with proper JWT authentication before deploying to production.
-    """
-    # Guard to prevent accidental production exposure
-    if settings.ENVIRONMENT.lower() not in ("dev", "development", "local"):
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="Auth required in production"
-        )
-    
-    return user_id
 
 
 async def process_virtual_tryon_with_ai(
@@ -254,7 +236,7 @@ async def process_virtual_tryon_with_ai(
 @router.get("/", response_model=List[VirtualTryOnResponse])
 async def list_user_tryons(
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing),
+    user_id: int = Depends(get_current_user_id),
     status_filter: Optional[str] = Query(None, description="Filter by status: completed, processing, failed"),
     limit: int = Query(50, ge=1, le=100, description="Number of results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip")
@@ -313,7 +295,7 @@ async def generate_virtual_tryon_endpoint(
     request: VirtualTryOnRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     Generate a virtual try-on image.
@@ -381,7 +363,7 @@ async def generate_virtual_tryon_endpoint(
 async def get_tryon_result(
     tryon_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     Get the status and result of a virtual try-on.
@@ -429,7 +411,7 @@ async def get_tryon_result(
 async def delete_tryon(
     tryon_id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(get_current_user_id_for_testing)
+    user_id: int = Depends(get_current_user_id)
 ):
     """
     Delete a virtual try-on result.
