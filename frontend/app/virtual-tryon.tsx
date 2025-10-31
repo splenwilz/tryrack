@@ -193,7 +193,7 @@ export default function VirtualTryOnScreen() {
   
   // Debug suggestions
   useEffect(() => {
-    if (selectedItem) {
+    if (__DEV__ && selectedItem) {
       console.log('🔍 Suggestions Debug:', {
         category: selectedItem.category,
         colors: selectedItem.colors,
@@ -240,7 +240,9 @@ export default function VirtualTryOnScreen() {
   // Handle polling result updates
   useEffect(() => {
     if (!tryonResult) return;
-    console.log('📊 Try-on status:', tryonResult.status);
+    if (__DEV__) {
+      console.log('📊 Try-on status:', tryonResult.status);
+    }
 
     if (tryonResult.status === 'completed') {
       const url = tryonResult.result_image_url;
@@ -449,12 +451,14 @@ export default function VirtualTryOnScreen() {
     setIsGenerating(true);
     
     try {
-      console.log('🎨 Generating virtual try-on with Gemini API...');
-      console.log('📦 Selected items:', selectedItems.length);
-      selectedItems.forEach((item, idx) => {
-        console.log(`   [${idx+1}] ${item.title} (${item.category})`);
-      });
-      console.log('📸 User photo URL:', userPhoto);
+      if (__DEV__) {
+        console.log('🎨 Generating virtual try-on with Gemini API...');
+        console.log('📦 Selected items:', selectedItems.length);
+        selectedItems.forEach((item, idx) => {
+          console.log(`   [${idx+1}] ${item.title} (${item.category})`);
+        });
+        console.log('📸 User photo URL:', userPhoto);
+      }
       
       // Always send compressed base64 for user image
       const user_image_base64 = await toCompressedBase64(userPhoto);
@@ -492,8 +496,10 @@ export default function VirtualTryOnScreen() {
         custom_prompt: customPrompt.trim() || undefined, // Include custom prompt if provided
       };
       
-      console.log('🚀 Sending request to backend...');
-      console.log(`   Items: ${item_details.length} item(s)`);
+      if (__DEV__) {
+        console.log('🚀 Sending request to backend...');
+        console.log(`   Items: ${item_details.length} item(s)`);
+      }
       
       // Call API to generate try-on
       const result = await generateMutation.mutateAsync({
@@ -501,8 +507,10 @@ export default function VirtualTryOnScreen() {
         request,
       });
       
-      console.log('✅ Try-on request created with ID:', result.id);
-      console.log('📊 Status:', result.status);
+      if (__DEV__) {
+        console.log('✅ Try-on request created with ID:', result.id);
+        console.log('📊 Status:', result.status);
+      }
       
       // Start polling for result
       setTryonId(result.id);
