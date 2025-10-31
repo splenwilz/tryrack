@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, Field
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, model_validator
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 
@@ -170,6 +170,20 @@ class VirtualTryOnRequest(BaseModel):
     
     use_clean_background: bool = False  # Default: keep original background
     custom_prompt: Optional[str] = None  # Optional: user-defined prompt for custom try-on instructions
+    
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_single_item(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """Coerce single ItemDetails dict to list for backward compatibility.
+        
+        Existing clients send a single ItemDetails object, but Pydantic now requires a list.
+        This validator converts dict payloads into a one-element list so both shapes continue to work.
+        """
+        if isinstance(values, dict):
+            item_details = values.get("item_details")
+            if isinstance(item_details, dict):
+                values["item_details"] = [item_details]
+        return values
 
 
 class VirtualTryOnResponse(BaseModel):

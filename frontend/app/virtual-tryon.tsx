@@ -457,13 +457,18 @@ export default function VirtualTryOnScreen() {
       // Always send compressed base64 for user image
       const user_image_base64 = await toCompressedBase64(userPhoto);
       
+      // Infer item type per item: boutique items have 'boutique' property, wardrobe items don't
+      const inferItemType = (item: BoutiqueItem | WardrobeItemTryOn): 'wardrobe' | 'boutique' => {
+        return 'boutique' in item ? 'boutique' : 'wardrobe';
+      };
+      
       // Prepare item_details array for multi-item support
       const item_details: ItemDetails[] = await Promise.all(
         selectedItems.map(async (item) => {
           return {
             category: item.category,
             colors: item.colors || [],
-            type: (itemType || 'boutique') as 'wardrobe' | 'boutique',
+            type: inferItemType(item),
             item_id: item.id,
           };
         })
