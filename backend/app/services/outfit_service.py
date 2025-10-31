@@ -175,9 +175,12 @@ def calculate_color_compatibility(item_colors: List[str], wardrobe_item_colors: 
     # Check for complementary colors
     for item_color in item_colors_normalized:
         for wardrobe_color in wardrobe_colors_normalized:
-            # Extract base color (e.g., "navy blue" -> "blue")
-            item_base = item_color.split()[0] if item_color.split() else item_color
-            wardrobe_base = wardrobe_color.split()[0] if wardrobe_color.split() else wardrobe_color
+            # Extract base color (e.g., "navy blue" -> "blue", "light green" -> "green")
+            # Take the LAST word, which is typically the actual hue
+            item_tokens = item_color.split()
+            wardrobe_tokens = wardrobe_color.split()
+            item_base = item_tokens[-1] if item_tokens else item_color
+            wardrobe_base = wardrobe_tokens[-1] if wardrobe_tokens else wardrobe_color
             
             # Check if colors are complementary
             if COLOR_COMPLEMENTARY.get(item_base) == wardrobe_base or \
@@ -238,7 +241,6 @@ def get_compatible_items(
     item_category: str,
     item_colors: List[str],
     wardrobe_items: List[WardrobeItem],
-    user_gender: Optional[str] = None,
     item_tags: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
     """Get compatible wardrobe items for a given item being tried on.
@@ -252,7 +254,6 @@ def get_compatible_items(
         item_category: Category of item being tried on (e.g., "top", "bottom")
         item_colors: Colors of item being tried on
         wardrobe_items: List of user's wardrobe items to check
-        user_gender: Optional user gender for gender-aware filtering
         item_tags: Optional tags from the item being tried on (for style matching)
         
     Returns:

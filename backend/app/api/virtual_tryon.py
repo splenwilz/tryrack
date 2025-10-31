@@ -476,7 +476,6 @@ async def get_tryon_suggestions(
         item_tags = []
         if item_id:
             try:
-                from app.services import get_wardrobe_item
                 logger.info(f"🔍 Fetching wardrobe item {item_id} for tag extraction...")
                 selected_item = get_wardrobe_item(db, item_id, user_id)
                 if selected_item:
@@ -488,8 +487,8 @@ async def get_tryon_suggestions(
                         logger.info(f"⚠️ Item {item_id} has no tags")
                 else:
                     logger.warning(f"❌ Item {item_id} not found or not owned by user {user_id}")
-            except Exception as e:
-                logger.exception(f"❌ Could not extract tags from item {item_id}: {e}")
+            except Exception:
+                logger.exception(f"❌ Could not extract tags from item {item_id}")
         else:
             logger.info(f"ℹ️ No item_id provided, will use empty tags for style compatibility")
         
@@ -523,8 +522,7 @@ async def get_tryon_suggestions(
             item_category=category,
             item_colors=item_colors,
             item_tags=item_tags,  # Pass tags from selected item
-            wardrobe_items=wardrobe_items,
-            user_gender=user.gender
+            wardrobe_items=wardrobe_items
         )
         
         # Serialize wardrobe items for response
