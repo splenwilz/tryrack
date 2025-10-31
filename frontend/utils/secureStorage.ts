@@ -283,11 +283,20 @@ export async function validateStoredToken(): Promise<boolean> {
       const expirationTime = payload.exp;
       
       if (currentTime >= expirationTime) {
-        console.warn('🔍 SecureStorage Debug - Token expired, clearing stored data');
+        console.warn('🔍 SecureStorage Debug - Access token expired');
         console.log('🔍 SecureStorage Debug - Current time:', currentTime, 'Expiration:', expirationTime);
-        // Clear expired token and user data to prevent authentication issues
-        await clearAllAuthData();
-        return false;
+        
+        // Check if refresh token exists - if so, don't clear data (will auto-refresh)
+        const refreshToken = await getRefreshToken();
+        if (refreshToken) {
+          console.log('🔍 SecureStorage Debug - Refresh token available, will auto-refresh');
+          // Don't clear data - API client will handle refresh automatically
+          return false; // Token is expired but refresh is available
+        } else {
+          console.warn('🔍 SecureStorage Debug - No refresh token, clearing stored data');
+          await clearAllAuthData();
+          return false;
+        }
       }
       
       console.log('🔍 SecureStorage Debug - Token is valid and not expired');

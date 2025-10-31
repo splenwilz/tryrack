@@ -10,9 +10,10 @@ from alembic import context
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-# Import your models
+# Import your models - must import all models for autogenerate to detect them
+# See: https://alembic.sqlalchemy.org/en/latest/autogenerate.html#what-does-autogenerate-detect
 from app.db import Base
-from app.models import User
+from app.models import User, WardrobeItem, VirtualTryOnResult, RefreshToken  # Import all models so Base.metadata includes them
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

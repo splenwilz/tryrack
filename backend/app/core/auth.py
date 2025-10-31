@@ -2,6 +2,9 @@
 
 Secure-by-default: verify WorkOS-issued JWTs using JWKS (RS256). Fallback to
 the local HMAC token only in development for backwards compatibility.
+
+Industry standard: Short-lived access tokens (15-60 min) with long-lived 
+refresh tokens (7-30 days) following OAuth2 best practices.
 """
 import jwt
 from jwt import PyJWKClient
@@ -12,7 +15,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
 from sqlalchemy.orm import Session
 from app.db import get_db
-from app.models import User
+from app.models import User, RefreshToken
+import secrets
+import hashlib
 
 WORKOS_JWKS_URL = "https://api.workos.com/user_management/jwks"
 WORKOS_ISSUER = "https://api.workos.com"
@@ -20,7 +25,12 @@ bearer_scheme = HTTPBearer(auto_error=True)
 
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
-    """Create JWT access token."""
+    """
+    Create short-lived JWT access token (industry standard: 15-60 minutes).
+    
+    Access tokens are short-lived to minimize security risk if compromised.
+    Use refresh tokens for longer sessions.
+    """
     to_encode = data.copy()
     
     if expires_delta:
@@ -31,6 +41,103 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+def generate_refresh_token() -> str:
+    """Generate a secure random refresh token string."""
+    return secrets.token_urlsafe(64)  # 64 bytes = ~86 characters
+
+
+def hash_refresh_token(token: str) -> str:
+    """Hash refresh token for secure database storage (never store plain tokens)."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_refresh_token(db: Session, user_id: int) -> tuple[str, RefreshToken]:
+    """
+    Create refresh token and store it in database.
+    
+    Industry standard: Long-lived tokens (7-30 days) used to obtain new access tokens.
+    Returns: (plain_token, db_record) - plain token sent to client, hash stored in DB.
+    """
+    # Generate secure random token
+    plain_token = generate_refresh_token()
+    hashed_token = hash_refresh_token(plain_token)
+    
+    # Calculate expiration
+    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    
+    # Create database record
+    refresh_token = RefreshToken(
+        user_id=user_id,
+        token=hashed_token,  # Store hash, never plain token
+        expires_at=expires_at,
+        revoked=False
+    )
+    db.add(refresh_token)
+    db.commit()
+    db.refresh(refresh_token)
+    
+    return plain_token, refresh_token
+
+
+def verify_refresh_token(db: Session, token: str) -> RefreshToken | None:
+    """
+    Verify refresh token is valid and not revoked/expired.
+    
+    Returns RefreshToken record if valid, None otherwise.
+    """
+    hashed_token = hash_refresh_token(token)
+    
+    refresh_token = db.query(RefreshToken).filter(
+        RefreshToken.token == hashed_token,
+        RefreshToken.revoked == False,
+        RefreshToken.expires_at > datetime.now(timezone.utc)
+    ).first()
+    
+    return refresh_token
+
+
+def revoke_refresh_token(db: Session, token: str) -> bool:
+    """
+    Revoke a refresh token (token rotation or logout).
+    
+    Industry standard: Revoke old token when issuing new one (token rotation).
+    """
+    hashed_token = hash_refresh_token(token)
+    
+    refresh_token = db.query(RefreshToken).filter(
+        RefreshToken.token == hashed_token
+    ).first()
+    
+    if refresh_token and not refresh_token.revoked:
+        refresh_token.revoked = True
+        refresh_token.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+        return True
+    
+    return False
+
+
+def revoke_all_user_refresh_tokens(db: Session, user_id: int) -> int:
+    """
+    Revoke all refresh tokens for a user (logout from all devices).
+    
+    Returns number of tokens revoked.
+    """
+    tokens = db.query(RefreshToken).filter(
+        RefreshToken.user_id == user_id,
+        RefreshToken.revoked == False
+    ).all()
+    
+    revoked_count = 0
+    for token in tokens:
+        token.revoked = True
+        token.revoked_at = datetime.now(timezone.utc)
+        revoked_count += 1
+    
+    db.commit()
+    return revoked_count
 
 
 def verify_token(token: str):
