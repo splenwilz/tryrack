@@ -10,6 +10,9 @@ from functools import lru_cache
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
+from sqlalchemy.orm import Session
+from app.db import get_db
+from app.models import User
 
 WORKOS_JWKS_URL = "https://api.workos.com/user_management/jwks"
 bearer_scheme = HTTPBearer(auto_error=True)
@@ -62,7 +65,10 @@ def _get_jwks_client() -> PyJWKClient:
     return PyJWKClient(WORKOS_JWKS_URL)
 
 
-def get_current_user_id(creds: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> int:
+def get_current_user_id(
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> int:
     """FastAPI dependency: returns authenticated user's id.
 
     Expects a WorkOS access token in Authorization: Bearer <token>.
@@ -70,10 +76,25 @@ def get_current_user_id(creds: HTTPAuthorizationCredentials = Depends(bearer_sch
     token = creds.credentials
     try:
         payload = verify_token(token)
-        # WorkOS tokens use "sub" for user id; our dev tokens may use "sub" as int or string
+        # WorkOS tokens: sub is a string like "user_01...". Dev tokens may set numeric sub.
         sub = payload.get("sub") or payload.get("user_id")
-        user_id = int(sub)
-        return user_id
+        if sub is None:
+            raise ValueError("Missing subject in token")
+
+        # If numeric-like, allow direct cast (dev/HMAC tokens)
+        try:
+            return int(sub)
+        except (TypeError, ValueError):
+            pass
+
+        # Otherwise, map WorkOS user id -> our internal user via oauth_provider_id
+        user = db.query(User).filter(User.oauth_provider_id == str(sub)).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authenticated user not found",
+            )
+        return user.id
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
