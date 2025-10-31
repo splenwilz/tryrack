@@ -28,7 +28,7 @@ class User(Base):
     # OAuth-specific fields
     # Based on WorkOS user profile structure from documentation
     oauth_provider = Column(String(50), nullable=True)  # e.g., "google", "github"
-    oauth_provider_id = Column(String(255), nullable=True)  # Provider's user ID
+    oauth_provider_id = Column(String(255), nullable=True, index=True)  # Provider's user ID
     first_name = Column(String(100), nullable=True)  # From OAuth profile
     last_name = Column(String(100), nullable=True)  # From OAuth profile
     profile_picture_url = Column(String(500), nullable=True)  # Avatar URL from OAuth
