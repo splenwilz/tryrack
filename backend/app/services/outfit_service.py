@@ -139,8 +139,9 @@ def is_neutral_color(color: str) -> bool:
         True if color is neutral
     """
     normalized = normalize_color(color)
-    # Check if normalized color contains any neutral keyword
-    return any(neutral in normalized for neutral in NEUTRAL_COLORS)
+    # Use token matching to avoid false positives (e.g., "olive" in "olivia", "beige" in "beigey")
+    tokens = normalized.split()
+    return any(token in NEUTRAL_COLORS for token in tokens) or normalized in NEUTRAL_COLORS
 
 
 def calculate_color_compatibility(item_colors: List[str], wardrobe_item_colors: List[str]) -> float:
@@ -192,8 +193,11 @@ def calculate_color_compatibility(item_colors: List[str], wardrobe_item_colors: 
                 if item_base in group and wardrobe_base in group:
                     return 0.7
             
-            # Check for similar/same colors
-            if item_base == wardrobe_base or item_base in wardrobe_color or wardrobe_base in item_color:
+            # Check for similar/same colors (exact base match or as distinct tokens)
+            if item_base == wardrobe_base:
+                return 0.6
+            # Check if base appears as a complete token in the full color string
+            if (item_base in wardrobe_tokens or wardrobe_base in item_tokens):
                 return 0.6
     
     # Default: somewhat compatible but not ideal
@@ -268,7 +272,7 @@ def get_compatible_items(
         ]
     """
     if not wardrobe_items:
-        logger.info(f"No wardrobe items provided for compatibility check")
+        logger.info("No wardrobe items provided for compatibility check")
         return []
     
     # Normalize the item category to generic category
