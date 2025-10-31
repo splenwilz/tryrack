@@ -285,10 +285,12 @@ export default function VirtualTryOnScreen() {
 
   // Helper functions for multi-item management
   const addItemToTryOn = (item: BoutiqueItem | WardrobeItemTryOn) => {
-    // Check if item is already selected
-    const isAlreadySelected = selectedItems.some(
-      (selected) => selected.id === item.id && (selected as any).type === (item as any).type
-    );
+    // Check if item is already selected (infer type same way as in request payload)
+    const isAlreadySelected = selectedItems.some((selected) => {
+      const selectedType = 'boutique' in selected ? 'boutique' : 'wardrobe';
+      const candidateType = 'boutique' in item ? 'boutique' : 'wardrobe';
+      return selected.id === item.id && selectedType === candidateType;
+    });
     
     if (isAlreadySelected) {
       Alert.alert('Already Selected', 'This item is already in your try-on list.');
