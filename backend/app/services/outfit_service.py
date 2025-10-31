@@ -92,7 +92,7 @@ def normalize_category(category: str) -> str:
 # Reference: Fashion color theory - neutrals as base colors
 NEUTRAL_COLORS = {
     "black", "white", "gray", "grey", "navy", "beige", "tan", "brown",
-    "charcoal", "ivory", "cream", "khaki", "olive", "burgundy"
+    "charcoal", "ivory", "cream", "khaki", "olive"
 }
 
 # Color wheel relationships for complementary matching
@@ -331,7 +331,7 @@ def get_compatible_items(
         if style_score >= 0.8:
             reasons.append("Matching style")
         
-        if wardrobe_item.category in ["bottom", "shoes"]:
+        if normalized_wardrobe_category in ["bottom", "shoes"]:
             reasons.append(f"Perfect for {item_category}")
         
         # Only include items with decent compatibility (score >= 0.4)
