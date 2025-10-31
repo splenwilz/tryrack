@@ -15,6 +15,7 @@ from app.db import get_db
 from app.models import User
 
 WORKOS_JWKS_URL = "https://api.workos.com/user_management/jwks"
+WORKOS_ISSUER = "https://api.workos.com"
 bearer_scheme = HTTPBearer(auto_error=True)
 
 
@@ -46,10 +47,11 @@ def verify_token(token: str):
             signing_key.key,
             algorithms=["RS256"],
             audience=settings.WORKOS_CLIENT_ID,
-            options={"verify_aud": True},
+            issuer=WORKOS_ISSUER,
+            options={"verify_aud": True, "verify_iss": True},
         )
         return payload
-    except Exception:
+    except jwt.PyJWTError:
         # Fallback only in local/dev
         if settings.ENVIRONMENT.lower() in ("dev", "development", "local"):
             try:
@@ -77,7 +79,7 @@ def get_current_user_id(
     try:
         payload = verify_token(token)
         # WorkOS tokens: sub is a string like "user_01...". Dev tokens may set numeric sub.
-        sub = payload.get("sub") or payload.get("user_id")
+        sub = payload.get("sub")
         if sub is None:
             raise ValueError("Missing subject in token")
 
@@ -95,9 +97,18 @@ def get_current_user_id(
                 detail="Authenticated user not found",
             )
         return user.id
-    except Exception as e:
+    except ValueError as e:
+        # Authentication failure (bad/expired token)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail=str(e) or "Invalid or expired token",
+        ) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Unexpected system error
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication system error",
         ) from e
 
