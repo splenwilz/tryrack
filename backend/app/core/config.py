@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Short-lived access tokens (industry standard: 15-60 min)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Long-lived refresh tokens (industry standard: 7-30 days)
     ALGORITHM: str = "HS256"
     
     # WorkOS OAuth Configuration

@@ -11,16 +11,37 @@ export interface ItemDetails {
   category: string;
   colors: string[];
   type: 'wardrobe' | 'boutique';
+  item_id?: string; // Optional ID of the specific item
 }
 
 export interface VirtualTryOnRequest {
   // Prefer URLs when available; fall back to base64 for fresh photos
   user_image_url?: string;
-  item_image_url?: string;
+  item_image_url?: string; // Legacy: single item image URL (backward compatibility)
   user_image_base64?: string;
-  item_image_base64?: string;
-  item_details: ItemDetails;
+  item_image_base64?: string; // Legacy: single item image base64 (backward compatibility)
+  item_details: ItemDetails | ItemDetails[]; // Support both single item (legacy) and multiple items
   use_clean_background?: boolean; // Optional: default false (keep original background)
+  custom_prompt?: string; // Optional: user-defined custom prompt for AI generation
+}
+
+export interface TryOnSuggestion {
+  id: number;
+  title: string;
+  category: string;
+  colors: string[];
+  imageUrl: string;
+  compatibility_score: number;
+  compatibility_reasons: string[];
+  [key: string]: any; // Allow other wardrobe item fields
+}
+
+export interface TryOnSuggestionsResponse {
+  category: string;
+  item_colors: string[];
+  suggestions: TryOnSuggestion[];
+  total_suggestions: number;
+  message?: string;
 }
 
 export interface VirtualTryOnResult {
@@ -191,5 +212,42 @@ export async function convertImageToBase64(imageUri: string): Promise<string> {
     console.error('❌ Error converting image to base64:', error);
     throw new Error('Failed to convert image to base64');
   }
+}
+
+/**
+ * Hook to fetch try-on suggestions for a given item category
+ * Returns compatible items from user's wardrobe
+ */
+export function useTryOnSuggestions(
+  category: string | null,
+  colors: string[] | null,
+  userId: number,
+  enabled: boolean = true
+) {
+  return useQuery<TryOnSuggestionsResponse>({
+    queryKey: ['tryOnSuggestions', category, colors, userId],
+    queryFn: async (): Promise<TryOnSuggestionsResponse> => {
+      if (!category || !userId) {
+        throw new Error('Category and userId are required');
+      }
+      
+      const params = new URLSearchParams({
+        category,
+        user_id: userId.toString(),
+      });
+      
+      // Add colors if provided
+      if (colors && colors.length > 0) {
+        params.append('colors', colors.join(','));
+      }
+      
+      const response = await apiClient.get<TryOnSuggestionsResponse>(
+        `/virtual-tryon/suggestions?${params.toString()}`
+      );
+      return response;
+    },
+    enabled: enabled && !!category && userId > 0,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
 }
 

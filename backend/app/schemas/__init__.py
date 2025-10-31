@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 
@@ -131,31 +131,64 @@ class WardrobeItemStatusUpdate(BaseModel):
 # ===== Virtual Try-On Schemas =====
 
 class ItemDetails(BaseModel):
-    """Item details for virtual try-on context."""
+    """Item details for virtual try-on context.
+    
+    Represents a single item being tried on. For multi-item try-ons,
+    use a list of ItemDetails.
+    """
     category: str
     colors: List[str]
     type: str  # 'wardrobe' or 'boutique'
+    item_id: Optional[str] = None  # Optional ID of the specific item (wardrobe item ID or boutique item ID)
 
 
 class VirtualTryOnRequest(BaseModel):
-    """Request schema for generating virtual try-on."""
+    """Request schema for generating virtual try-on.
+    
+    Supports single-item (backward compatible) and multi-item try-ons.
+    For single-item: pass one ItemDetails object.
+    For multi-item: pass a list of ItemDetails (1-5 items max).
+    
+    Note: item_image_url and item_image_base64 are legacy single-item fields.
+    For multiple items, each item's image should be provided via the items' own URLs
+    or we'll fetch them based on item_id.
+    """
     user_image_url: Optional[str] = None  # Prefer URL; fallback to base64
-    item_image_url: Optional[str] = None  # Prefer URL; fallback to base64
+    item_image_url: Optional[str] = None  # Legacy: single item image URL (for backward compatibility)
     # Allow freshly captured images without first uploading
     user_image_base64: Optional[str] = None
-    item_image_base64: Optional[str] = None
-    item_details: ItemDetails
+    item_image_base64: Optional[str] = None  # Legacy: single item image base64 (for backward compatibility)
+    
+    # Multi-item support: list of items to try on (1-5 items max)
+    # Backward compatibility: API endpoint will convert single ItemDetails object to list
+    item_details: List[ItemDetails] = Field(
+        ...,
+        description="List of items (1-5 items) to try on",
+        min_length=1,
+        max_length=5
+    )
+    
     use_clean_background: bool = False  # Default: keep original background
+    custom_prompt: Optional[str] = None  # Optional: user-defined prompt for custom try-on instructions
 
 
 class VirtualTryOnResponse(BaseModel):
-    """Response schema for virtual try-on result."""
+    """Response schema for virtual try-on result.
+    
+    Supports both single-item (legacy fields) and multi-item (items field) responses.
+    Legacy fields (item_type, item_id, item_image_url) are kept for backward compatibility.
+    """
     id: int
     user_id: int
-    item_type: str
-    item_id: str
+    item_type: str  # Legacy: first item's type (for backward compatibility)
+    item_id: str  # Legacy: first item's ID (for backward compatibility)
     user_image_url: str
-    item_image_url: str
+    item_image_url: str  # Legacy: first item's image URL (for backward compatibility)
+    
+    # Multi-item support: JSON array of items tried on
+    # Format: [{"item_id": "123", "item_type": "wardrobe", "category": "top", "colors": ["blue"]}, ...]
+    items: Optional[List[Dict[str, Any]]] = None
+    
     result_image_url: Optional[str] = None
     result_image_base64: Optional[str] = None
     status: str  # 'processing', 'completed', 'failed'

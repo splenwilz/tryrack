@@ -8,7 +8,7 @@ import logging
 import httpx
 import json
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ async def remove_background(image_base64: str) -> Optional[str]:
             "contents": [{
                 "parts": [
                     {
-                        "text": "Transform this clothing item photo into a perfect wardrobe catalog image. If the item is wrinkled, folded, or poorly positioned, straighten it out and present it professionally as if it's being displayed in a high-end fashion app. Place it on a stylish, modern background (soft gradients, subtle patterns, or minimalist designs) that makes the item stand out. Ensure the item is properly oriented, centered, and showcased in the best possible way - as if it's being professionally photographed for a premium wardrobe application. The final result should look polished and catalog-ready."
+                        "text": "Transform this clothing item into a professional catalog image. Straighten wrinkles/folds, center on stylish minimalist background (soft gradient or studio backdrop). Output polished, app-ready result."
                     },
                     {
                         "inlineData": {
@@ -129,31 +129,16 @@ async def extract_item_metadata(image_base64: str) -> Optional[Dict[str, Any]]:
             "Content-Type": "application/json"
         }
         
-        # Structured prompt for JSON extraction with FULLY FLEXIBLE categories
-        prompt = """Analyze this clothing/wardrobe item image and return ONLY a valid JSON object with the following structure:
-
+        # Concise structured prompt for JSON extraction
+        prompt = """Extract wardrobe item metadata. Return ONLY valid JSON:
 {
-  "title": "A short, descriptive name for this item (e.g., 'Navy Blue Linen Blazer', 'Distressed Denim Jeans')",
-  "category": "A clear, specific category name",
-  "colors": ["specific color names with shades"],
-  "tags": ["style", "material", "occasion", "season"]
+  "title": "short descriptive name (max 50 chars)",
+  "category": "lowercase singular term (e.g., blazer, t-shirt, jeans, dress, sneaker, handbag)",
+  "colors": ["1-3 specific colors with shades like navy blue, burgundy, olive green"],
+  "tags": ["3-5 tags: style/material/occasion/season/fit"]
 }
 
-Rules:
-- title: Max 50 characters, descriptive and specific
-- category: Use ONE clear, intuitive fashion category term
-  * Use LOWERCASE (e.g., "blazer" not "Blazer")
-  * Use SINGULAR form (e.g., "sneaker" not "sneakers")
-  * Be SPECIFIC but not overly detailed (e.g., "denim jacket" not "blue denim jacket")
-  * Use COMMON terms (e.g., "t-shirt" not "tee", "jeans" not "denim pants")
-  * Be CONSISTENT - use the same term for similar items
-  * Examples: blazer, cardigan, hoodie, t-shirt, jeans, chinos, cargo pants, 
-    sneaker, boot, heel, sandal, dress, skirt, shorts, coat, jacket, vest,
-    handbag, backpack, hat, scarf, belt, watch, sunglasses, swimsuit, activewear, etc.
-- colors: Be specific! Use color names with shades like 'navy blue', 'burgundy', 'olive green', 'charcoal gray', 'rose gold', 'mint green', etc. (1-3 colors)
-- tags: 3-5 relevant tags describing style, material, occasion, season, fit (casual, formal, summer, winter, cotton, denim, oversized, slim-fit, etc.)
-
-Return ONLY the JSON object, no additional text."""
+Rules: category=lowercase singular (blazer not Blazer, sneaker not sneakers). colors=specific shades. tags=3-5 descriptive. Return JSON only."""
 
         payload = {
             "contents": [{
@@ -230,31 +215,55 @@ Return ONLY the JSON object, no additional text."""
 
 async def generate_virtual_tryon(
     user_image_base64: str,
-    item_image_base64: str,
-    item_category: str,
-    item_colors: list[str],
-    use_clean_background: bool = False
+    items: List[Dict[str, Any]],  # List of items: [{"image_base64": "...", "category": "top", "colors": ["blue"], "tags": [...], "formality": 0.7}, ...]
+    use_clean_background: bool = False,
+    custom_prompt: Optional[str] = None  # Optional: user-defined custom prompt
 ) -> Optional[str]:
     """
     Generate virtual try-on using Gemini 2.5 Flash Image.
     
+    Supports both single-item (backward compatible) and multi-item try-ons.
+    Uses simplified prompts that preserve user's actual appearance (no formality enhancements).
+    
     Args:
         user_image_base64: Base64 encoded user photo
-        item_image_base64: Base64 encoded item photo
-        item_category: Category of the item (e.g., "dress", "shirt")
-        item_colors: List of colors for the item
+        items: List of item dictionaries, each containing:
+            - image_base64: Base64 encoded item photo
+            - category: Category of the item (e.g., "top", "bottom", "shoes")
+            - colors: List of colors for the item (e.g., ["blue", "white"])
+            - tags: Optional list of style tags
+            - formality: Optional formality score (deprecated, kept for backward compat)
         use_clean_background: Whether to replace background with clean one
+        custom_prompt: Optional user-defined prompt (overrides default prompt if provided)
         
     Returns:
         Base64 encoded result image or None if failed
+        
+    Example items format (single item for backward compatibility):
+        [{"image_base64": "...", "category": "shirt", "colors": ["blue"], "tags": ["formal"], "formality": 0.8}]
+    
+    Example items format (multiple items):
+        [
+            {"image_base64": "...", "category": "top", "colors": ["blue"], "tags": ["formal"], "formality": 0.8},
+            {"image_base64": "...", "category": "bottom", "colors": ["black"], "tags": ["business"], "formality": 0.7},
+            {"image_base64": "...", "category": "shoes", "colors": ["brown"], "tags": ["dress_shoes"]}
+        ]
     """
     import time
     function_start = time.time()
-    print(f"👕 [0.0s] Starting virtual try-on for {item_category} in colors {item_colors}, clean_bg: {use_clean_background}")
-    logger.info(f"👕 [0.0s] Starting virtual try-on for {item_category} in colors {item_colors}, clean_bg: {use_clean_background}")
+    
+    # Validate items list
+    if not items or len(items) == 0:
+        logger.error("❌ No items provided for virtual try-on")
+        return None
+    
+    num_items = len(items)
+    item_categories = [item.get("category", "unknown") for item in items]
+    logger.info(f"👕 [0.0s] Starting virtual try-on for {num_items} item(s): {item_categories}, clean_bg: {use_clean_background}")
+    print(f"👕 [0.0s] Starting virtual try-on for {num_items} item(s): {item_categories}, clean_bg: {use_clean_background}")
     
     try:
-        # Determine MIME types from base64 signatures
+        # Determine MIME type for user image
         mime_start = time.time()
         
         if user_image_base64.startswith('/9j/') or user_image_base64.startswith('data:image/jpeg'):
@@ -268,71 +277,123 @@ async def generate_virtual_tryon(
         else:
             user_mime = 'image/jpeg'  # Default
         
-        if item_image_base64.startswith('/9j/') or item_image_base64.startswith('data:image/jpeg'):
-            item_mime = 'image/jpeg'
-            if item_image_base64.startswith('data:'):
-                item_image_base64 = item_image_base64.split(',', 1)[1]
-        elif item_image_base64.startswith('iVBOR') or item_image_base64.startswith('data:image/png'):
-            item_mime = 'image/png'
-            if item_image_base64.startswith('data:'):
-                item_image_base64 = item_image_base64.split(',', 1)[1]
-        else:
-            item_mime = 'image/jpeg'  # Default
+        # Process all item images - determine MIME types and clean base64
+        processed_items = []
+        total_item_size = 0
+        for i, item in enumerate(items):
+            item_image_base64 = item.get("image_base64", "")
+            if not item_image_base64:
+                logger.warning(f"⚠️ Item {i+1} missing image_base64, skipping")
+                continue
+            
+            # Determine MIME type and clean base64
+            if item_image_base64.startswith('/9j/') or item_image_base64.startswith('data:image/jpeg'):
+                item_mime = 'image/jpeg'
+                if item_image_base64.startswith('data:'):
+                    item_image_base64 = item_image_base64.split(',', 1)[1]
+            elif item_image_base64.startswith('iVBOR') or item_image_base64.startswith('data:image/png'):
+                item_mime = 'image/png'
+                if item_image_base64.startswith('data:'):
+                    item_image_base64 = item_image_base64.split(',', 1)[1]
+            else:
+                item_mime = 'image/jpeg'  # Default
+            
+            item_size = len(item_image_base64) / 1024 / 1024  # MB
+            total_item_size += item_size
+            
+            processed_items.append({
+                **item,
+                "image_base64": item_image_base64,
+                "mime_type": item_mime
+            })
+        
+        if not processed_items:
+            logger.error("❌ No valid item images found")
+            return None
         
         mime_elapsed = time.time() - mime_start
         elapsed = time.time() - function_start
         
         # Log base64 sizes
         user_b64_size = len(user_image_base64) / 1024 / 1024  # MB
-        item_b64_size = len(item_image_base64) / 1024 / 1024  # MB
-        print(f"📊 [{elapsed:.1f}s] Base64 sizes - User: {user_b64_size:.2f}MB, Item: {item_b64_size:.2f}MB")
-        logger.info(f"📊 [{elapsed:.1f}s] Base64 sizes - User: {user_b64_size:.2f}MB, Item: {item_b64_size:.2f}MB")
+        print(f"📊 [{elapsed:.1f}s] Base64 sizes - User: {user_b64_size:.2f}MB, Items: {total_item_size:.2f}MB total ({len(processed_items)} items)")
+        logger.info(f"📊 [{elapsed:.1f}s] Base64 sizes - User: {user_b64_size:.2f}MB, Items: {total_item_size:.2f}MB total ({len(processed_items)} items)")
         
-        # Prepare Gemini API payload with multimodal content
-        colors_text = ", ".join(item_colors) if item_colors else "original colors"
+        # Build item descriptions for prompt
+        item_descriptions = []
+        for item in processed_items:
+            category = item.get("category", "item")
+            colors = item.get("colors", [])
+            colors_text = ", ".join(colors) if colors else "original colors"
+            item_descriptions.append(f"- {category} in {colors_text}")
         
-        # Build prompt based on background preference
-        if use_clean_background:
-            background_instruction = "- Replace the background with a clean, minimalist background perfect for a fashion wardrobe app (soft gradient, studio-style, or elegant neutral backdrop)"
-            style_note = "- Make it look styled and photorealistic - as if shot in a professional studio"
-            quality_note = "- The final image should look polished, catalog-ready, and suitable for a premium fashion app"
+        items_text = "\n".join(item_descriptions)
+        
+        # Use custom prompt if provided, otherwise use professional stylist default
+        if custom_prompt:
+            prompt = custom_prompt
         else:
-            background_instruction = "- Keep the background from the person's original photo unchanged"
-            style_note = "- Make it look natural and photorealistic"
-            quality_note = "- The final image should look realistic and natural"
+            # Professional stylist prompt - understands fashion but preserves user's natural appearance
+            bg_cmd = "Replace background with clean minimalist gradient/studio backdrop" if use_clean_background else "Keep original background"
+            
+            # Build prompts with professional stylist context (better understanding, still preserves user)
+            if len(processed_items) == 1:
+                item = processed_items[0]
+                category = item.get("category", "item")
+                colors = item.get("colors", [])
+                colors_text = ", ".join(colors) if colors else "original colors"
+
+                prompt = f"""You are a professional fashion stylist creating a virtual try-on. Person wearing {category} in {colors_text}.
+
+CRITICAL: Keep face, body shape, pose, and all non-clothing features identical.
+
+REQUIREMENTS:
+- Fit {category} naturally on body, match colors exactly ({colors_text})
+- Realistic lighting, shadows, fabric draping
+- {bg_cmd}
+- Preserve person's actual appearance and style (don't change their natural look)
+
+Output: photorealistic image with person wearing {category}. Face must match original exactly."""
+            else:
+                prompt = f"""You are a professional fashion stylist creating a virtual try-on. Person wearing complete outfit:
+{items_text}
+
+CRITICAL: Keep face, body shape, pose, and all non-clothing features identical.
+
+REQUIREMENTS:
+- Fit all items naturally on body, match colors exactly
+- Layer correctly (top over bottom, outerwear over items)
+- Realistic lighting/shadows for all items
+- {bg_cmd}
+- Preserve person's actual appearance and style (don't change their natural look)
+
+Output: photorealistic image with person wearing complete outfit. Face must match original exactly."""
+
+        # Build payload parts: text prompt + user image + all item images
+        # Reference: Gemini API supports multiple images in a single request
+        # See: https://ai.google.dev/gemini-api/docs/guides/multimodal
+        parts = [{"text": prompt}]
         
-        prompt = f"""Create a realistic virtual try-on image for a wardrobe app, showing this person wearing this {item_category}.
-
-Requirements:
-- Keep the person's EXACT pose, body shape, and facial features unchanged
-- Fit the {item_category} naturally and realistically on the person's body
-- Match the item's colors exactly: {colors_text}
-- Maintain realistic lighting, shadows, and fabric draping
-{background_instruction}
-{style_note}
-- Ensure the {item_category} fits the person's body size appropriately
-- Preserve all natural proportions and anatomy
-{quality_note}
-
-Return ONLY the final generated image with the person wearing the {item_category}."""
-
+        # Add user image
+        parts.append({
+            "inlineData": {
+                "mimeType": user_mime,
+                "data": user_image_base64
+            }
+        })
+        
+        # Add all item images
+        for item in processed_items:
+            parts.append({
+                "inlineData": {
+                    "mimeType": item["mime_type"],
+                    "data": item["image_base64"]
+                }
+            })
+        
         payload = {
             "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inlineData": {
-                            "mimeType": user_mime,
-                            "data": user_image_base64
-                        }
-                    },
-                    {
-                        "inlineData": {
-                            "mimeType": item_mime,
-                            "data": item_image_base64
-                        }
-                    }
-                ]
+                "parts": parts
             }],
             "generationConfig": {
                 "responseModalities": ["Image"]

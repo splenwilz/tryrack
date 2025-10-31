@@ -3,7 +3,8 @@ import { useGoogleOAuth, type OAuthResponse } from '@/hooks/useGoogleOAuth';
 import { useAppleOAuth } from '@/hooks/useAppleOAuth';
 import { API_CONFIG } from '@/constants/config';
 import { 
-  storeAccessToken, 
+  storeAccessToken,
+  storeRefreshToken,
   storeUserData, 
   getUserData, 
   clearAllAuthData, 
@@ -171,11 +172,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       setUser(userData);
       
-      // Store user data and access token securely
+      // Store user data, access token, and refresh token securely
       // Based on Expo SecureStore documentation for sensitive data
       await Promise.all([
         storeUserData(userData),
-        storeAccessToken(data.access_token)
+        storeAccessToken(data.access_token),
+        storeRefreshToken(data.refresh_token) // Store refresh token for automatic token refresh
       ]);
       
       return { success: true };
@@ -302,11 +304,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       setUser(userData);
       
-      // Store user data and access token securely
+      // Store user data, access token, and refresh token securely
       // Based on Expo SecureStore documentation for sensitive data
       await Promise.all([
         storeUserData(userData),
-        storeAccessToken(data.access_token)
+        storeAccessToken(data.access_token),
+        storeRefreshToken(data.refresh_token) // Store refresh token for automatic token refresh
       ]);
       
       return { success: true };
@@ -484,11 +487,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       setUser(userData);
       
-      // Store user data and access token securely
+      // Store user data, access token, and refresh token securely
       // Based on Expo SecureStore documentation for sensitive data
       await Promise.all([
         storeUserData(userData),
-        storeAccessToken(data.access_token)
+        storeAccessToken(data.access_token),
+        storeRefreshToken(data.refresh_token) // Store refresh token for automatic token refresh
       ]);
       
       return { success: true };

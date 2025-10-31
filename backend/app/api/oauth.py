@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.workos import workos_client
 from app.core.config import settings
+from app.core.auth import create_refresh_token
 from app.services import get_user_by_email, create_user
 from app.db import get_db
 from app.schemas import UserCreate
@@ -183,14 +184,15 @@ async def oauth_callback(
             db.commit()
             db.refresh(user)
         
-        # Create JWT access token for the user
-        # Based on our existing JWT implementation
+        # Create JWT access token (short-lived) and refresh token (long-lived)
         access_token = create_access_token(data={"sub": str(user.id)})
+        refresh_token_str, _ = create_refresh_token(db, user.id)
         
         # For mobile app, we'll return the token in the response
         # The frontend will handle storing the token
         return {
             "access_token": access_token,
+            "refresh_token": refresh_token_str,
             "token_type": "bearer",
             "user": {
                 "id": user.id,

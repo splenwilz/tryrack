@@ -5,6 +5,7 @@ import secrets
 
 from app.core.workos import workos_client
 from app.core.config import settings
+from app.core.auth import create_refresh_token, verify_refresh_token, revoke_refresh_token
 from app.services import get_user_by_email, create_user
 from app.db import get_db
 from app.schemas import UserCreate
@@ -29,9 +30,10 @@ class SignInRequest(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    """Authentication response model."""
+    """Authentication response model with refresh token (OAuth2 standard)."""
     access_token: str
-    token_type: str
+    refresh_token: str  # Long-lived token for refreshing access tokens
+    token_type: str = "bearer"
     user: dict
 
 
@@ -46,6 +48,18 @@ class VerifyEmailRequest(BaseModel):
     """Email verification request model."""
     pending_authentication_token: str
     code: str
+
+
+class RefreshTokenRequest(BaseModel):
+    """Refresh token request model (OAuth2 standard)."""
+    refresh_token: str
+
+
+class RefreshTokenResponse(BaseModel):
+    """Refresh token response model (OAuth2 standard with token rotation)."""
+    access_token: str
+    refresh_token: str  # New refresh token (token rotation)
+    token_type: str = "bearer"
 
 
 @router.post("/signup")
@@ -154,11 +168,13 @@ async def sign_up(
         db.commit()
         db.refresh(user)
         
-        # Create JWT access token for the user
+        # Create JWT access token (short-lived) and refresh token (long-lived)
         access_token = create_access_token(data={"sub": str(user.id)})
+        refresh_token_str, _ = create_refresh_token(db, user.id)
         
         return AuthResponse(
             access_token=access_token,
+            refresh_token=refresh_token_str,
             token_type="bearer",
             user={
                 "id": user.id,
@@ -396,11 +412,13 @@ async def verify_email(
         db.commit()
         db.refresh(user)
         
-        # Create JWT access token for the user
+        # Create JWT access token (short-lived) and refresh token (long-lived)
         access_token = create_access_token(data={"sub": str(user.id)})
+        refresh_token_str, _ = create_refresh_token(db, user.id)
         
         return AuthResponse(
             access_token=access_token,
+            refresh_token=refresh_token_str,
             token_type="bearer",
             user={
                 "id": user.id,
@@ -419,3 +437,42 @@ async def verify_email(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Email verification failed: {str(e)}"
         )
+
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_token(
+    request: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Refresh access token using refresh token (OAuth2 standard).
+    
+    Industry best practices:
+    - Token rotation: New refresh token issued, old one revoked
+    - Short-lived access tokens (15 min) + long-lived refresh tokens (7 days)
+    - Secure: Refresh tokens stored hashed in database
+    
+    Returns new access_token and refresh_token (token rotation).
+    """
+    # Verify refresh token is valid and not revoked/expired
+    refresh_token_record = verify_refresh_token(db, request.refresh_token)
+    
+    if not refresh_token_record:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token"
+        )
+    
+    # Revoke old refresh token (token rotation for security)
+    revoke_refresh_token(db, request.refresh_token)
+    
+    # Create new access token
+    access_token = create_access_token(data={"sub": str(refresh_token_record.user_id)})
+    
+    # Create new refresh token (token rotation)
+    new_refresh_token_str, _ = create_refresh_token(db, refresh_token_record.user_id)
+    
+    return RefreshTokenResponse(
+        access_token=access_token,
+        refresh_token=new_refresh_token_str
+    )

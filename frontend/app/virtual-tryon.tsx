@@ -1,4 +1,4 @@
-import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions, ActivityIndicator, Animated, Easing, Share, Platform } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Image, Alert, ScrollView, Dimensions, ActivityIndicator, Animated, Easing, Share, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -9,7 +9,7 @@ import { useState, useEffect, useRef } from 'react';
 // Use legacy API to access cacheDirectory and downloadAsync consistently
 import * as FileSystem from 'expo-file-system/legacy';
 import { useUser } from '@/hooks/useAuthQuery';
-import { useGenerateVirtualTryOn, useVirtualTryOnResult, convertImageToBase64 } from '@/hooks/useVirtualTryOn';
+import { useGenerateVirtualTryOn, useVirtualTryOnResult, convertImageToBase64, useTryOnSuggestions, ItemDetails } from '@/hooks/useVirtualTryOn';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
@@ -152,18 +152,22 @@ export default function VirtualTryOnScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const iconColor = useThemeColor({}, 'icon');
+  const textColor = useThemeColor({}, 'text');
   const { itemId, itemType, itemData } = useLocalSearchParams<{ itemId: string; itemType?: string; itemData?: string }>();
   
   // Get current user to check for existing full body photo
   const { data: user } = useUser();
   
-  const [selectedItem, setSelectedItem] = useState<BoutiqueItem | WardrobeItemTryOn | null>(null);
+  // Multi-item support: selectedItems array (backward compatible with selectedItem)
+  const [selectedItems, setSelectedItems] = useState<(BoutiqueItem | WardrobeItemTryOn)[]>([]);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [hasUsedExistingPhoto, setHasUsedExistingPhoto] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [tryonId, setTryonId] = useState<number | null>(null);
   const [useCleanBackground, setUseCleanBackground] = useState(false); // Toggle for clean background
+  const [customPrompt, setCustomPrompt] = useState<string>(''); // User-editable custom prompt
+  const [showPromptEditor, setShowPromptEditor] = useState(false); // Toggle prompt editor visibility
   const TARGET_WIDTH = 640;
   const COMPRESS_QUALITY = 0.6;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -175,21 +179,54 @@ export default function VirtualTryOnScreen() {
     user?.id ?? 0,
     tryonId !== null
   );
-
-  // Find the selected item
+  
+  // Backward compatibility: use first item for UI display (legacy code references)
+  const selectedItem = selectedItems[0] || null;
+  
+  // Suggestions: fetch compatible items when first item is selected
+  const { data: suggestionsData, isLoading: isLoadingSuggestions } = useTryOnSuggestions(
+    selectedItem?.category || null,
+    selectedItem?.colors || null,
+    user?.id ?? 0,
+    !!selectedItem && user?.id ? true : false
+  );
+  
+  // Debug suggestions
   useEffect(() => {
+    if (selectedItem) {
+      console.log('🔍 Suggestions Debug:', {
+        category: selectedItem.category,
+        colors: selectedItem.colors,
+        userId: user?.id,
+        suggestionsData,
+        isLoading: isLoadingSuggestions
+      });
+    }
+  }, [selectedItem, suggestionsData, isLoadingSuggestions, user?.id]);
+
+  // Find the selected item and initialize selectedItems array
+  useEffect(() => {
+    let initialItem: BoutiqueItem | WardrobeItemTryOn | null = null;
+    
     if (itemType === 'wardrobe' && itemData) {
       // Parse wardrobe item data
       try {
         const parsedData = JSON.parse(itemData);
-        setSelectedItem(parsedData);
+        initialItem = parsedData;
       } catch (error) {
         console.error('Error parsing wardrobe item data:', error);
       }
     } else if (itemId) {
       // Find boutique item from mock data
       const item = mockBoutiqueData.find(item => item.id === itemId);
-      setSelectedItem(item || null);
+      initialItem = item || null;
+    }
+    
+    // Initialize selectedItems with the first item
+    if (initialItem) {
+      setSelectedItems([initialItem]);
+    } else {
+      setSelectedItems([]);
     }
   }, [itemId, itemType, itemData]);
 
@@ -244,6 +281,31 @@ export default function VirtualTryOnScreen() {
 
   const handleBackPress = () => {
     router.back();
+  };
+
+  // Helper functions for multi-item management
+  const addItemToTryOn = (item: BoutiqueItem | WardrobeItemTryOn) => {
+    // Check if item is already selected
+    const isAlreadySelected = selectedItems.some(
+      (selected) => selected.id === item.id && (selected as any).type === (item as any).type
+    );
+    
+    if (isAlreadySelected) {
+      Alert.alert('Already Selected', 'This item is already in your try-on list.');
+      return;
+    }
+    
+    // Limit to 5 items max
+    if (selectedItems.length >= 5) {
+      Alert.alert('Limit Reached', 'You can try on up to 5 items at once.');
+      return;
+    }
+    
+    setSelectedItems([...selectedItems, item]);
+  };
+
+  const removeItemFromTryOn = (itemId: string) => {
+    setSelectedItems(selectedItems.filter(item => item.id !== itemId));
   };
 
   const handleUseExistingPhoto = () => {
@@ -377,8 +439,8 @@ export default function VirtualTryOnScreen() {
   }
 
   const handleGenerateTryOn = async () => {
-    if (!selectedItem || !userPhoto || !user?.id) {
-      Alert.alert('Missing Information', 'Please select both an item and your photo to generate virtual try-on');
+    if (selectedItems.length === 0 || !userPhoto || !user?.id) {
+      Alert.alert('Missing Information', 'Please select at least one item and your photo to generate virtual try-on');
       return;
     }
 
@@ -386,28 +448,45 @@ export default function VirtualTryOnScreen() {
     
     try {
       console.log('🎨 Generating virtual try-on with Gemini API...');
-      console.log('📦 Selected item:', selectedItem.title);
-      console.log('🏷️ Item type:', itemType || 'boutique');
+      console.log('📦 Selected items:', selectedItems.length);
+      selectedItems.forEach((item, idx) => {
+        console.log(`   [${idx+1}] ${item.title} (${item.category})`);
+      });
       console.log('📸 User photo URL:', userPhoto);
       
-      // Always send compressed base64 for both images to speed up Gemini
+      // Always send compressed base64 for user image
       const user_image_base64 = await toCompressedBase64(userPhoto);
-      const item_image_base64 = selectedItem.imageUrl ? await toCompressedBase64(selectedItem.imageUrl) : undefined;
+      
+      // Prepare item_details array for multi-item support
+      const item_details: ItemDetails[] = await Promise.all(
+        selectedItems.map(async (item) => {
+          return {
+            category: item.category,
+            colors: item.colors || [],
+            type: (itemType || 'boutique') as 'wardrobe' | 'boutique',
+            item_id: item.id,
+          };
+        })
+      );
+
+      // For backward compatibility, also provide first item's image as base64
+      const firstItem = selectedItems[0];
+      const firstItemImageBase64 = firstItem.imageUrl 
+        ? await toCompressedBase64(firstItem.imageUrl)
+        : undefined;
 
       const request = {
         user_image_url: undefined,
-        item_image_url: undefined,
+        item_image_url: undefined, // Legacy field
         user_image_base64,
-        item_image_base64,
-        item_details: {
-          category: selectedItem.category,
-          colors: selectedItem.colors || [],
-          type: (itemType || 'boutique') as 'wardrobe' | 'boutique',
-        },
-        use_clean_background: useCleanBackground, // User preference
+        item_image_base64: firstItemImageBase64, // Legacy: first item for backward compatibility
+        item_details: item_details, // Always send as array (backend expects List[ItemDetails])
+        use_clean_background: useCleanBackground,
+        custom_prompt: customPrompt.trim() || undefined, // Include custom prompt if provided
       };
       
       console.log('🚀 Sending request to backend...');
+      console.log(`   Items: ${item_details.length} item(s)`);
       
       // Call API to generate try-on
       const result = await generateMutation.mutateAsync({
@@ -423,12 +502,23 @@ export default function VirtualTryOnScreen() {
       
       // The useEffect will handle the polling and status updates
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Error generating virtual try-on:', error);
       setIsGenerating(false);
       
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to generate virtual try-on. Please try again.';
-      Alert.alert('Error', errorMessage);
+      // Error handling
+      let errorMessage = 'Failed to generate virtual try-on. Please try again.';
+      if (error && typeof error === 'object') {
+        if ('message' in error && typeof error.message === 'string') {
+          errorMessage = error.message;
+        } else if ('response' in error && error.response && typeof error.response === 'object' && 'data' in error.response) {
+          const data = error.response.data;
+          if (data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string') {
+            errorMessage = data.detail;
+          }
+        }
+      }
+      Alert.alert('Generation Failed', errorMessage);
     }
   };
 
@@ -498,30 +588,119 @@ export default function VirtualTryOnScreen() {
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Product Information */}
+        {/* Selected Items Section - Multi-item support */}
         <View style={styles.productSection}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>{itemType === 'wardrobe' ? 'Your Item' : 'Product'}</ThemedText>
-          <View style={[styles.productCard, { backgroundColor }]}>
-            <Image source={{ uri: selectedItem.imageUrl }} style={styles.productImage} />
-            <View style={styles.productInfo}>
-              {'brand' in selectedItem && <ThemedText style={styles.brandName}>{selectedItem.brand}</ThemedText>}
-              <ThemedText style={styles.productTitle}>{selectedItem.title}</ThemedText>
-              {'price' in selectedItem && <ThemedText style={styles.price}>₦{selectedItem.price.toLocaleString()}</ThemedText>}
-              {'colors' in selectedItem && selectedItem.colors && (
-                <View style={styles.colorsContainer}>
-                  <ThemedText style={styles.colorsLabel}>Colors:</ThemedText>
-                  <View style={styles.colorsList}>
-                    {selectedItem.colors.map((color: string) => (
-                      <View key={color} style={[styles.colorChip, { backgroundColor: tintColor }]}>
-                        <ThemedText style={styles.colorText}>{color}</ThemedText>
-                      </View>
-                    ))}
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            {selectedItems.length === 1 
+              ? (itemType === 'wardrobe' ? 'Your Item' : 'Product')
+              : `Items to Try On (${selectedItems.length})`
+            }
+          </ThemedText>
+          
+          {/* Display all selected items */}
+          {selectedItems.map((item, index) => (
+            <View key={`${item.id}-${index}`} style={[styles.productCard, { backgroundColor, marginBottom: 12 }]}>
+              <View style={styles.productCardHeader}>
+                <Image source={{ uri: item.imageUrl }} style={styles.productImage} />
+                {selectedItems.length > 1 && (
+                  <TouchableOpacity
+                    style={styles.removeItemButton}
+                    onPress={() => removeItemFromTryOn(item.id)}
+                  >
+                    <IconSymbol name="xmark.circle.fill" size={20} color="#ff4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={styles.productInfo}>
+                {'brand' in item && <ThemedText style={styles.brandName}>{item.brand}</ThemedText>}
+                <ThemedText style={styles.productTitle}>{item.title}</ThemedText>
+                {'price' in item && <ThemedText style={styles.price}>₦{item.price.toLocaleString()}</ThemedText>}
+                {'colors' in item && item.colors && (
+                  <View style={styles.colorsContainer}>
+                    <ThemedText style={styles.colorsLabel}>Colors:</ThemedText>
+                    <View style={styles.colorsList}>
+                      {item.colors.map((color: string) => (
+                        <View key={color} style={[styles.colorChip, { backgroundColor: tintColor }]}>
+                          <ThemedText style={styles.colorText}>{color}</ThemedText>
+                        </View>
+                      ))}
+                    </View>
                   </View>
-                </View>
-              )}
+                )}
+              </View>
             </View>
-          </View>
+          ))}
         </View>
+
+        {/* Suggestions Section - Show compatible items from wardrobe */}
+        {selectedItem && (
+          <View style={styles.suggestionsSection}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              Compatible Items from Your Wardrobe
+            </ThemedText>
+            <ThemedText style={[styles.suggestionsSubtitle, { color: '#999' }]}>
+              Add items to create a complete outfit
+            </ThemedText>
+            
+            {isLoadingSuggestions ? (
+              <ActivityIndicator size="small" color={tintColor} style={{ marginVertical: 20 }} />
+            ) : suggestionsData && suggestionsData.suggestions && suggestionsData.suggestions.length > 0 ? (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.suggestionsScroll}
+              >
+                {suggestionsData.suggestions.map((suggestion) => (
+                  <TouchableOpacity
+                    key={suggestion.id}
+                    style={[styles.suggestionCard, { backgroundColor }]}
+                    onPress={() => {
+                      // Convert suggestion to item format and add to try-on
+                      const itemToAdd: WardrobeItemTryOn = {
+                        id: suggestion.id.toString(),
+                        title: suggestion.title,
+                        category: suggestion.category,
+                        imageUrl: suggestion.image_clean || suggestion.image_original || suggestion.imageUrl,
+                        colors: suggestion.colors || [],
+                        tags: suggestion.tags || [],
+                      };
+                      addItemToTryOn(itemToAdd);
+                    }}
+                  >
+                    <Image 
+                      source={{ uri: suggestion.image_clean || suggestion.image_original || suggestion.imageUrl }} 
+                      style={styles.suggestionImage} 
+                    />
+                    <View style={styles.suggestionInfo}>
+                      <ThemedText style={styles.suggestionTitle} numberOfLines={2}>
+                        {suggestion.title}
+                      </ThemedText>
+                      <View style={styles.suggestionScore}>
+                        <IconSymbol name="star.fill" size={12} color={tintColor} />
+                        <ThemedText style={[styles.suggestionScoreText, { color: tintColor }]}>
+                          {Math.round(suggestion.compatibility_score * 100)}% match
+                        </ThemedText>
+                      </View>
+                      {suggestion.compatibility_reasons && suggestion.compatibility_reasons.length > 0 && (
+                        <ThemedText style={[styles.suggestionReason, { color: '#999' }]} numberOfLines={1}>
+                          {suggestion.compatibility_reasons[0]}
+                        </ThemedText>
+                      )}
+                    </View>
+                    <View style={[styles.addButton, { backgroundColor: tintColor }]}>
+                      <IconSymbol name="plus" size={16} color="white" />
+                      <ThemedText style={styles.addButtonText}>Add</ThemedText>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <ThemedText style={[styles.suggestionsSubtitle, { color: '#999', textAlign: 'center', marginVertical: 20 }]}>
+                No compatible items found in your wardrobe. Add more items to get suggestions!
+              </ThemedText>
+            )}
+          </View>
+        )}
 
         {/* User Photo Section */}
         <View style={styles.photoSection}>
@@ -614,6 +793,48 @@ export default function VirtualTryOnScreen() {
           </View>
         </View>
 
+        {/* Custom Prompt Editor */}
+        <View style={styles.toggleSection}>
+          <TouchableOpacity
+            style={styles.toggleRow}
+            onPress={() => setShowPromptEditor(!showPromptEditor)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.toggleInfo}>
+              <ThemedText style={styles.toggleLabel}>Custom Instructions (Advanced)</ThemedText>
+              <ThemedText style={[styles.toggleSubtext, { color: '#999' }]}>
+                {showPromptEditor ? 'Tap to hide editor' : 'Tap to customize AI prompt'}
+              </ThemedText>
+            </View>
+            <IconSymbol 
+              name={showPromptEditor ? "chevron.up" : "chevron.down"} 
+              size={20} 
+              color={iconColor} 
+            />
+          </TouchableOpacity>
+          
+          {showPromptEditor && (
+            <View style={[styles.promptEditorContainer, { backgroundColor }]}>
+              <ThemedText style={[styles.promptEditorLabel, { color: '#999', marginBottom: 8 }]}>
+                Customize how the AI generates your try-on. Leave empty to use default.
+              </ThemedText>
+              <TextInput
+                style={[styles.promptEditor, { backgroundColor, borderColor: 'rgba(0,0,0,0.1)', color: textColor }]}
+                placeholder="Example: Make the outfit look casual and relaxed, keep my natural pose..."
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={6}
+                value={customPrompt}
+                onChangeText={setCustomPrompt}
+                textAlignVertical="top"
+              />
+              <ThemedText style={[styles.promptEditorHint, { color: '#999', fontSize: 12, marginTop: 8 }]}>
+                💡 Tip: Describe the style, pose, or look you want. The AI will preserve your face and body shape.
+              </ThemedText>
+            </View>
+          )}
+        </View>
+
         <TouchableOpacity 
           style={[
             styles.generateButton, 
@@ -621,7 +842,7 @@ export default function VirtualTryOnScreen() {
             (!userPhoto || isGenerating) && styles.disabledButton
           ]} 
           onPress={handleGenerateTryOn}
-          disabled={!userPhoto || isGenerating}
+          disabled={selectedItems.length === 0 || !userPhoto || isGenerating}
         >
           {isGenerating ? (
             <View style={styles.loadingContainer}>
@@ -859,6 +1080,31 @@ const styles = StyleSheet.create({
   toggleThumbActive: {
     alignSelf: 'flex-end',
   },
+  promptEditorContainer: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  promptEditorLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  promptEditor: {
+    minHeight: 120,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    fontSize: 14,
+    textAlignVertical: 'top',
+  },
+  promptEditorHint: {
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
   generateButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1054,6 +1300,86 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 14,
+    fontWeight: '600',
+  },
+  // Multi-item styles
+  productCardHeader: {
+    position: 'relative',
+  },
+  removeItemButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+    padding: 4,
+    zIndex: 1,
+  },
+  // Suggestions styles
+  suggestionsSection: {
+    marginBottom: 24,
+  },
+  suggestionsSubtitle: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  suggestionsScroll: {
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
+  suggestionCard: {
+    width: 140,
+    marginRight: 12,
+    borderRadius: 12,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  suggestionImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  suggestionInfo: {
+    marginBottom: 8,
+  },
+  suggestionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  suggestionScore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 4,
+  },
+  suggestionScoreText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  suggestionReason: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    gap: 4,
+    marginTop: 'auto',
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 12,
     fontWeight: '600',
   },
 });
