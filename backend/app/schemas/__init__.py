@@ -117,6 +117,8 @@ class WardrobeItemResponse(WardrobeItemBase):
     image_original: Optional[str] = None
     image_clean: Optional[str] = None
     status: str
+    last_worn_at: Optional[datetime] = None  # When item was last worn
+    wear_count: int = 0  # Total number of times item has been worn
     created_at: datetime
     updated_at: Optional[datetime] = None
     
@@ -125,6 +127,12 @@ class WardrobeItemResponse(WardrobeItemBase):
 
 class WardrobeItemStatusUpdate(BaseModel):
     """Schema for updating wardrobe item status."""
+    status: str  # 'clean', 'worn', 'dirty'
+
+
+class BatchStatusUpdate(BaseModel):
+    """Schema for batch updating multiple wardrobe item statuses."""
+    item_ids: List[int]  # List of item IDs to update
     status: str  # 'clean', 'worn', 'dirty'
 
 

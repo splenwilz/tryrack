@@ -19,7 +19,24 @@ export default function RootLayout() {
   return (
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={{ persister: asyncStoragePersister }}
+      persistOptions={{ 
+        persister: asyncStoragePersister,
+        // Optional: max age for persisted data (24 hours)
+        maxAge: 24 * 60 * 60 * 1000,
+        // Buster: Increment this to invalidate all persisted cache (useful for migrations)
+        // Changed from undefined to 1 to invalidate old cache with pending queries
+        buster: 'v1',
+        // Only persist queries that have successfully completed
+        // This prevents "dehydrated as pending" errors when rehydrating
+        // Reference: https://tanstack.com/query/latest/docs/framework/react/reference/hydration#shoulddehydratequery
+        dehydrateOptions: {
+          shouldDehydrateQuery: (query) => {
+            // Only persist queries with successful status
+            // Filter out pending/loading queries to prevent CancelledError on rehydration
+            return query.state.status === 'success';
+          },
+        },
+      }}
     >
       <AuthProvider>
         <WishlistProvider>
@@ -44,6 +61,7 @@ export default function RootLayout() {
                 <Stack.Screen name="licenses" options={{ headerShown: false }} />
                 <Stack.Screen name="add-item" options={{ headerShown: false }} />
                 <Stack.Screen name="wardrobe-item-detail" options={{ headerShown: false }} />
+                <Stack.Screen name="todays-outfit" options={{ headerShown: false }} />
                 <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
               </Stack>
               <StatusBar style="auto" />

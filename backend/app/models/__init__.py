@@ -121,6 +121,10 @@ class WardrobeItem(Base):
     # Embedding for recommendation engine (future use)
     embedding_id = Column(String(255), nullable=True)
     
+    # Wear tracking
+    last_worn_at = Column(DateTime(timezone=True), nullable=True, index=True)  # When item was last worn
+    wear_count = Column(Integer, default=0, nullable=False)  # Total number of times item has been worn
+    
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
