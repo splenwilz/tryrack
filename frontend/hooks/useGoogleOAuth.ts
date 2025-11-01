@@ -14,7 +14,7 @@ export interface OAuthUser {
 
 export interface OAuthResponse {
   access_token: string;
-  refresh_token: string; // Long-lived token for refreshing access tokens (7 days)
+  refresh_token: string; // Long-lived token for refreshing access tokens (lifetime configured in backend)
   token_type: string;
   user: OAuthUser;
 }

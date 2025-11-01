@@ -366,11 +366,13 @@ export default function HomeScreen() {
   const userId = user?.id ?? 0;
 
   // Fetch wardrobe items from API
-  const { data: wardrobeItems = [], isLoading: isLoadingWardrobe } = useWardrobeItems(userId);
+  // Don't default to [] - undefined means data hasn't loaded yet, treat as loading state
+  const { data: wardrobeItems, isLoading: isLoadingWardrobe, isFetching: isFetchingWardrobe } = useWardrobeItems(userId);
 
   // Transform wardrobe items to highlights format
   const wardrobeHighlights = useMemo(() => {
-    if (!wardrobeItems || wardrobeItems.length === 0) return [];
+    // Gate on wardrobeItems being defined (not just empty array)
+    if (!wardrobeItems?.length) return [];
 
     // Filter out processing items
     const validItems = wardrobeItems.filter(
@@ -492,18 +494,19 @@ export default function HomeScreen() {
               Your most-worn and newest items
         </ThemedText>
           </View>
-          {isLoadingWardrobe ? (
+          {/* Show loading when: no user yet (userId === 0) OR data is loading/fetching without cache */}
+          {(userId === 0 || isLoadingWardrobe || (isFetchingWardrobe && !wardrobeItems)) ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={tintColor} />
               <ThemedText style={styles.loadingText}>Loading wardrobe...</ThemedText>
             </View>
-          ) : wardrobeHighlights.length > 0 ? (
+          ) : wardrobeItems && wardrobeHighlights.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.highlightsScroll}>
               {wardrobeHighlights.map((item) => (
                 <WardrobeHighlightCard key={item.id} item={item} />
               ))}
             </ScrollView>
-          ) : (
+          ) : wardrobeItems && wardrobeHighlights.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <View style={styles.emptyStateIcon}>
                 <ThemedText style={styles.emptyStateEmoji}>👕</ThemedText>
@@ -521,7 +524,7 @@ export default function HomeScreen() {
                 <ThemedText style={styles.emptyStateButtonText}>Add Your First Item</ThemedText>
               </TouchableOpacity>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Boutique Discoveries */}

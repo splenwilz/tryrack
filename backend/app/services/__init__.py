@@ -157,10 +157,13 @@ def update_wardrobe_item_status(db: Session, item: WardrobeItem, status: str) ->
     
     When status is "WORN":
     - Sets last_worn_at to current timestamp
-    - Increments wear_count
+    - Increments wear_count (with row-level locking to prevent race conditions)
     
     When status is "CLEAN" or "DIRTY":
     - Only updates status, preserves last_worn_at and wear_count
+    
+    Uses row-level locking for "WORN" updates to prevent lost increments
+    when multiple concurrent requests update the same item simultaneously.
     """
     from datetime import datetime, timezone
     
@@ -169,10 +172,16 @@ def update_wardrobe_item_status(db: Session, item: WardrobeItem, status: str) ->
         item.status = ItemStatus.CLEAN
         # Keep last_worn_at and wear_count unchanged
     elif status_upper == "WORN":
+        # Lock the row to prevent concurrent updates from clobbering wear_count
+        # This ensures we read the latest value and increment atomically
+        db.refresh(item, with_for_update=True)
+        
         item.status = ItemStatus.WORN
         # Track wear: set timestamp and increment count
+        # Use the freshly locked value to prevent race conditions
+        current_count = item.wear_count or 0
         item.last_worn_at = datetime.now(timezone.utc)
-        item.wear_count = (item.wear_count or 0) + 1
+        item.wear_count = current_count + 1
     elif status_upper == "DIRTY":
         item.status = ItemStatus.DIRTY
         # Keep last_worn_at and wear_count unchanged

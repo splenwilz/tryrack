@@ -259,12 +259,14 @@ async def sign_in(
             db.commit()
             db.refresh(user)
         
-        # Create JWT access token for the user
+        # Create JWT access token and refresh token for the user
         # Based on our existing JWT implementation
         access_token = create_access_token(data={"sub": str(user.id)})
+        refresh_token_str, _ = create_refresh_token(db, user.id)
         
         return AuthResponse(
             access_token=access_token,
+            refresh_token=refresh_token_str,
             token_type="bearer",
             user={
                 "id": user.id,

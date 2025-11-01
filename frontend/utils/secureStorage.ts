@@ -291,14 +291,14 @@ export async function validateStoredToken(): Promise<boolean> {
         console.log('🔍 Token Expiration Debug - Expiration time:', new Date(expirationTime * 1000).toISOString());
         
         // Check if refresh token exists - if so, keep it for token refresh when connection returns
-        // This allows seamless re-authentication for up to 7 days even after temporary disconnections
+        // This allows seamless re-authentication (token lifetime configured in backend, default: 7 days) even after temporary disconnections
         const refreshToken = await getRefreshToken();
         if (refreshToken) {
           console.log('✅ Token Expiration Debug - Refresh token available! Token will auto-refresh on next API call');
-          console.log('✅ Token Expiration Debug - User stays logged in (refresh token valid for 7 days)');
+          console.log('✅ Token Expiration Debug - User stays logged in (refresh token lifetime configured in backend)');
           // Don't clear data - keep refresh token for when connection is restored
           // API client will handle refresh automatically when making requests
-          return false; // Token is expired but refresh token is available (valid for 7 days)
+          return false; // Token is expired but refresh token is available (lifetime configured in backend)
         } else {
           console.warn('❌ Token Expiration Debug - No refresh token, clearing stored data');
           // Only clear if we truly have no way to refresh (no refresh token)

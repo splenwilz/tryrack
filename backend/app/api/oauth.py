@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from typing import Optional
 import secrets
 import base64
+import asyncio
 from sqlalchemy.orm import Session
 
 from app.core.workos import workos_client
@@ -120,7 +121,7 @@ async def oauth_callback(
         # Authenticate with WorkOS using the authorization code with retry logic
         # Retry on network/DNS errors (transient failures)
         # Documentation: https://workos.com/docs/authkit/react/python/2-add-authkit-to-your-app/add-a-callback-endpoint
-        import time
+        # Use asyncio.sleep instead of time.sleep to avoid blocking the FastAPI event loop
         max_retries = 3
         retry_delay = 1  # Start with 1 second delay
         
@@ -152,7 +153,7 @@ async def oauth_callback(
                     wait_time = retry_delay * (2 ** attempt)
                     print(f"⚠️ OAuth Debug - Network error (attempt {attempt + 1}/{max_retries}): {error_str}")
                     print(f"🔄 OAuth Debug - Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
+                    await asyncio.sleep(wait_time)
                 else:
                     # Non-retryable error or max retries reached
                     print(f"❌ OAuth Debug - Failed after {attempt + 1} attempts: {error_str}")

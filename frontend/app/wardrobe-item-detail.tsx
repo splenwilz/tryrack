@@ -26,7 +26,9 @@ export default function WardrobeItemDetailScreen() {
   const userId = user?.id || 0;
   const itemIdNum = itemId ? parseInt(itemId) : 0;
   
-  const { data: item, isLoading: isItemLoading, error } = useWardrobeItem(itemIdNum, userId);
+  // Use cached data when available (React Query provides cached data even while refetching)
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/caching
+  const { data: item, isLoading: isItemLoading, isFetching, error } = useWardrobeItem(itemIdNum, userId);
   const deleteMutation = useDeleteWardrobeItem();
   const updateStatusMutation = useUpdateWardrobeItemStatus();
   
@@ -131,9 +133,16 @@ export default function WardrobeItemDetailScreen() {
       if (diffDays === 0) return 'Today';
       if (diffDays === 1) return 'Yesterday';
       if (diffDays < 7) return `${diffDays} days ago`;
-      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-      if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-      return `${Math.floor(diffDays / 365)} years ago`;
+      if (diffDays < 30) {
+        const weeks = Math.floor(diffDays / 7);
+        return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+      }
+      if (diffDays < 365) {
+        const months = Math.floor(diffDays / 30);
+        return `${months} ${months === 1 ? 'month' : 'months'} ago`;
+      }
+      const years = Math.floor(diffDays / 365);
+      return `${years} ${years === 1 ? 'year' : 'years'} ago`;
     } catch {
       return 'Never worn';
     }
@@ -173,7 +182,15 @@ export default function WardrobeItemDetailScreen() {
     );
   };
 
-  if (isUserLoading || isItemLoading || !userId) {
+  // Show loading state ONLY if we have no cached data AND it's loading
+  // If we have cached data, show it immediately even while refetching
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/displaying-cached-data
+  const showLoadingState = (isUserLoading || (isItemLoading && !item) || !userId);
+  
+  // Show error state (but still show cached data if available)
+  const showErrorState = (error || !item) && !item;
+
+  if (showLoadingState) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader title="Item Details" showBackButton={true} onBackPress={handleBackPress} />
@@ -185,7 +202,8 @@ export default function WardrobeItemDetailScreen() {
     );
   }
 
-  if (error || !item) {
+  // Show error state only when there's no cached data to show
+  if (showErrorState) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader title="Item Details" showBackButton={true} onBackPress={handleBackPress} />
@@ -216,6 +234,14 @@ export default function WardrobeItemDetailScreen() {
       <CustomHeader title="Item Details" showBackButton={true} onBackPress={handleBackPress} />
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Show subtle loading indicator if refetching in background */}
+        {isFetching && !isItemLoading && item && (
+          <View style={styles.refetchIndicator}>
+            <ActivityIndicator size="small" color={tintColor} />
+            <ThemedText style={styles.refetchText}>Updating...</ThemedText>
+          </View>
+        )}
+        
         {/* Item Image */}
         <View style={styles.imageContainer}>
           <Image 
@@ -701,6 +727,19 @@ const styles = StyleSheet.create({
   wearHistoryValue: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Background refetch indicator
+  refetchIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 8,
+    marginBottom: 8,
+  },
+  refetchText: {
+    fontSize: 12,
+    opacity: 0.6,
   },
 });
 

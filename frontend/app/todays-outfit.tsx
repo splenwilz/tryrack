@@ -225,9 +225,11 @@ export default function TodaysOutfitScreen() {
     );
   }
   
-  // Show empty state ONLY if we have no items AND we're not loading/fetching
+  // Show empty state ONLY if we have fetched items AND there are none AND we're not loading/fetching
   // This ensures we don't flash empty state while data is being fetched
-  if (items.length === 0 && !isLoading && !isFetching) {
+  // Check Array.isArray(apiItems) to ensure data has actually been fetched (not just undefined)
+  const hasFetchedItems = Array.isArray(apiItems);
+  if (hasFetchedItems && items.length === 0 && !isLoading && !isFetching) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader title="Today's Outfit" showBackButton={true} onBackPress={() => router.back()} />

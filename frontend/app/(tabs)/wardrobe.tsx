@@ -365,9 +365,16 @@ export default function WardrobeScreen() {
       if (diffDays === 0) return 'Today';
       if (diffDays === 1) return 'Yesterday';
       if (diffDays < 7) return `${diffDays} days ago`;
-      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-      if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-      return `${Math.floor(diffDays / 365)} years ago`;
+      if (diffDays < 30) {
+        const weeks = Math.floor(diffDays / 7);
+        return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+      }
+      if (diffDays < 365) {
+        const months = Math.floor(diffDays / 30);
+        return `${months} ${months === 1 ? 'month' : 'months'} ago`;
+      }
+      const years = Math.floor(diffDays / 365);
+      return `${years} ${years === 1 ? 'year' : 'years'} ago`;
     } catch {
       return null;
     }
@@ -579,7 +586,8 @@ export default function WardrobeScreen() {
   // Show empty state ONLY if we have no items AND we're not loading/fetching
   // This ensures we don't flash empty state while data is being fetched
   // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/placeholder-query-data
-  if (items.length === 0 && !isLoading && !isFetching) {
+  // Gate on apiItems being defined (not just items.length) to prevent flash before query runs
+  if (apiItems && apiItems.length === 0 && !isLoading && !isFetching) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader

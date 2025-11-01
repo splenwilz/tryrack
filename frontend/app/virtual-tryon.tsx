@@ -680,13 +680,13 @@ export default function VirtualTryOnScreen() {
             <ThemedText style={[styles.suggestionsSubtitle, { color: '#999' }]}>
               Add items to create a complete outfit
               {isFetchingSuggestions && !isLoadingSuggestions && suggestionsData && (
-                <ThemedText style={{ fontSize: 11, opacity: 0.6 }}> • Updating...</ThemedText>
+                <ThemedText style={styles.suggestionsUpdatingText}> • Updating...</ThemedText>
               )}
             </ThemedText>
             
             {/* Show loading ONLY if we have no cached data */}
             {isLoadingSuggestions && !suggestionsData ? (
-              <ActivityIndicator size="small" color={tintColor} style={{ marginVertical: 20 }} />
+              <ActivityIndicator size="small" color={tintColor} style={styles.suggestionsLoadingIndicator} />
             ) : suggestionsData?.suggestions && suggestionsData.suggestions.length > 0 ? (
               <ScrollView 
                 horizontal 
@@ -1369,6 +1369,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     marginBottom: 12,
+  },
+  suggestionsUpdatingText: {
+    fontSize: 11,
+    opacity: 0.6,
+  },
+  suggestionsLoadingIndicator: {
+    marginVertical: 20,
   },
   suggestionsScroll: {
     marginHorizontal: -20,

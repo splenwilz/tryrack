@@ -187,6 +187,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Store user data, access token, and refresh token securely
       // Based on Expo SecureStore documentation for sensitive data
+      // Validate required tokens are present before storing (backend should always provide both)
+      if (!data.access_token || !data.refresh_token) {
+        console.error('⚠️ Auth Debug - Missing authentication tokens in sign-in response');
+        return { success: false, error: 'Invalid response: missing authentication tokens' };
+      }
+      
       await Promise.all([
         storeUserData(userData),
         storeAccessToken(data.access_token),
@@ -319,6 +325,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Store user data, access token, and refresh token securely
       // Based on Expo SecureStore documentation for sensitive data
+      // Validate required tokens are present before storing (backend should always provide both)
+      if (!data.access_token || !data.refresh_token) {
+        console.error('⚠️ Auth Debug - Missing authentication tokens in sign-up response');
+        return { success: false, error: 'Invalid response: missing authentication tokens' };
+      }
+      
       await Promise.all([
         storeUserData(userData),
         storeAccessToken(data.access_token),
@@ -398,7 +410,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Store user data, access token, and refresh token securely
         // Based on Expo SecureStore documentation for sensitive data
-        // Refresh token allows seamless token renewal for up to 7 days without re-authentication
+        // Refresh token lifetime is configured in backend (default: 7 days, configurable)
+        // Validate required tokens are present before storing (backend should always provide both)
+        if (!oauthResult.access_token || !oauthResult.refresh_token) {
+          console.error(`⚠️ Auth Debug - Missing authentication tokens in ${provider} OAuth response`);
+          return { success: false, error: 'Invalid response: missing authentication tokens' };
+        }
+        
         await Promise.all([
           storeUserData(userData),
           storeAccessToken(oauthResult.access_token),
@@ -504,6 +522,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Store user data, access token, and refresh token securely
       // Based on Expo SecureStore documentation for sensitive data
+      // Validate required tokens are present before storing (backend should always provide both)
+      if (!data.access_token || !data.refresh_token) {
+        console.error('⚠️ Auth Debug - Missing authentication tokens in email verification response');
+        return { success: false, error: 'Invalid response: missing authentication tokens' };
+      }
+      
       await Promise.all([
         storeUserData(userData),
         storeAccessToken(data.access_token),

@@ -121,14 +121,42 @@ export const useWardrobeItems = (
 
 /**
  * Get single wardrobe item hook
+ * Uses cached data when available for faster loading
+ * Also uses list cache as placeholder data for instant navigation
+ * Reference: https://tanstack.com/query/latest/docs/framework/react/guides/placeholder-query-data
  */
 export const useWardrobeItem = (itemId: number, userId: number) => {
+  const queryClient = useQueryClient();
+  
   return useQuery<WardrobeItem>({
     queryKey: ['wardrobe', itemId, userId],
     queryFn: async () => {
       return apiClient.get<WardrobeItem>(`/wardrobe/${itemId}?user_id=${userId}`);
     },
     enabled: !!itemId && !!userId,
+    staleTime: 2 * 60 * 1000, // 2 minutes - keep data fresh longer for faster navigation
+    // Use list cache as placeholder for instant navigation
+    // This allows the detail screen to show immediately if item is in the list cache
+    placeholderData: (previousData) => {
+      // If we already have data, use it
+      if (previousData) return previousData;
+      
+      // Try to find the item in the list cache
+      const listQueries = queryClient.getQueriesData<WardrobeItem[]>({
+        queryKey: ['wardrobe', userId],
+      });
+      
+      for (const [, listData] of listQueries) {
+        if (listData && Array.isArray(listData)) {
+          const cachedItem = listData.find((item) => item.id === itemId);
+          if (cachedItem) {
+            return cachedItem;
+          }
+        }
+      }
+      
+      return undefined;
+    },
   });
 };
 
