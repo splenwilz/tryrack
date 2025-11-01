@@ -6,10 +6,11 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router } from 'expo-router';
-import { useWardrobeItems, useUpdateWardrobeItemStatus } from '@/hooks/useWardrobe';
+import { useWardrobeItems, useUpdateWardrobeItemStatus, useBatchUpdateStatus } from '@/hooks/useWardrobe';
 import { useUser } from '@/hooks/useAuthQuery';
 import { WardrobeFilterModal } from '@/components/home/WardrobeFilterModal';
 import type { WardrobeFilters } from '@/components/home/WardrobeFilterModal';
+import { formatLastWorn } from '@/utils/dateFormatting';
 
 // Legacy interface for compatibility with existing code
 interface WardrobeItemCard {
@@ -225,6 +226,7 @@ export default function WardrobeScreen() {
   // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/caching
   const { data: apiItems, isLoading, isFetching, error } = useWardrobeItems(userId);
   const updateStatusMutation = useUpdateWardrobeItemStatus();
+  const batchUpdateMutation = useBatchUpdateStatus();
   
   // Use cached data if available, fallback to empty array only when we know there's no data
   // Memoize to prevent unnecessary re-renders and dependency changes in useMemo hooks
@@ -353,32 +355,6 @@ export default function WardrobeScreen() {
     created_at: item.created_at,
   }));
   
-  // Helper function to format "last worn X days ago"
-  const formatLastWorn = (lastWornAt?: string): string | null => {
-    if (!lastWornAt) return null;
-    try {
-      const lastWorn = new Date(lastWornAt);
-      const now = new Date();
-      const diffTime = Math.abs(now.getTime() - lastWorn.getTime());
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (diffDays === 0) return 'Today';
-      if (diffDays === 1) return 'Yesterday';
-      if (diffDays < 7) return `${diffDays} days ago`;
-      if (diffDays < 30) {
-        const weeks = Math.floor(diffDays / 7);
-        return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
-      }
-      if (diffDays < 365) {
-        const months = Math.floor(diffDays / 30);
-        return `${months} ${months === 1 ? 'month' : 'months'} ago`;
-      }
-      const years = Math.floor(diffDays / 365);
-      return `${years} ${years === 1 ? 'year' : 'years'} ago`;
-    } catch {
-      return null;
-    }
-  };
   
   // Handler for status changes
   const handleStatusChange = async (itemId: string, newStatus: 'clean' | 'worn' | 'dirty') => {
@@ -413,18 +389,65 @@ export default function WardrobeScreen() {
             style: 'default',
             onPress: async () => {
               try {
-                // Mark as worn first (tracks wear_count), then mark as dirty
-                await updateStatusMutation.mutateAsync({
-                  itemId: parseInt(itemId),
+                const itemIds = [parseInt(itemId)];
+                
+                // First mark as worn (tracks wear_count)
+                const wornResult = await batchUpdateMutation.mutateAsync({
                   userId,
+                  itemIds,
                   status: 'worn',
                 });
-                await updateStatusMutation.mutateAsync({
-                  itemId: parseInt(itemId),
-                  userId,
-                  status: 'dirty',
-                });
-                Alert.alert('Item Updated', 'Item marked as worn and dirty.');
+                
+                // Only proceed if worn update succeeded
+                if (wornResult.updated_items.length === 0) {
+                  Alert.alert('Error', 'Failed to mark as worn. Please try again.');
+                  return;
+                }
+                
+                // Then mark as dirty - with error recovery
+                try {
+                  await batchUpdateMutation.mutateAsync({
+                    userId,
+                    itemIds,
+                    status: 'dirty',
+                  });
+                  
+                  Alert.alert('Item Updated', 'Item marked as worn and dirty.');
+                } catch (dirtyError) {
+                  // If marking dirty fails, offer to revert to clean
+                  console.error('Failed to mark as dirty:', dirtyError);
+                  const item = wardrobeItems.find(i => i.id === itemId);
+                  const itemTitle = item?.title || 'this item';
+                  
+                  Alert.alert(
+                    'Partial Update',
+                    `"${itemTitle}" marked as worn, but failed to mark as dirty.`,
+                    [
+                      {
+                        text: 'Leave as Worn',
+                        style: 'default',
+                        onPress: () => {},
+                      },
+                      {
+                        text: 'Revert to Clean',
+                        style: 'destructive',
+                        onPress: async () => {
+                          try {
+                            await batchUpdateMutation.mutateAsync({
+                              userId,
+                              itemIds,
+                              status: 'clean',
+                            });
+                            Alert.alert('Reverted', `"${itemTitle}" reverted to clean state.`);
+                          } catch (revertError) {
+                            console.error('Failed to revert:', revertError);
+                            Alert.alert('Error', 'Failed to revert. Item remains in "worn" state.');
+                          }
+                        },
+                      },
+                    ]
+                  );
+                }
               } catch (error) {
                 console.error('Failed to update status:', error);
                 Alert.alert('Error', 'Failed to update item status. Please try again.');

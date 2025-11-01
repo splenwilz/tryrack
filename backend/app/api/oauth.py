@@ -136,28 +136,32 @@ async def oauth_callback(
                 )
                 print(f"🔍 OAuth Debug - WorkOS auth response received successfully")
                 break  # Success, exit retry loop
-            except Exception as e:
+            except (OSError, TimeoutError, ConnectionError) as e:
+                # Network-related errors that are retryable
+                # OSError covers DNS resolution failures (e.g., "nodename nor servname")
+                # TimeoutError covers timeout scenarios
+                # ConnectionError covers connection failures
                 last_error = e
                 error_str = str(e)
-                # Check if it's a network/DNS error (retryable)
-                is_network_error = (
-                    "nodename nor servname" in error_str or
-                    "network" in error_str.lower() or
-                    "DNS" in error_str or
-                    "connection" in error_str.lower() or
-                    "timeout" in error_str.lower()
-                )
+                is_network_error = True
+                print(f"⚠️ OAuth Debug - Network error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {error_str}")
                 
-                if is_network_error and attempt < max_retries - 1:
+                if attempt < max_retries - 1:
                     # Retry with exponential backoff
                     wait_time = retry_delay * (2 ** attempt)
                     print(f"⚠️ OAuth Debug - Network error (attempt {attempt + 1}/{max_retries}): {error_str}")
                     print(f"🔄 OAuth Debug - Retrying in {wait_time} seconds...")
                     await asyncio.sleep(wait_time)
                 else:
-                    # Non-retryable error or max retries reached
-                    print(f"❌ OAuth Debug - Failed after {attempt + 1} attempts: {error_str}")
+                    # Max retries reached for network error
+                    print(f"❌ OAuth Debug - Failed after {max_retries} network retry attempts: {error_str}")
                     raise
+            except Exception as e:
+                # Non-retryable errors - raise immediately
+                last_error = e
+                error_str = str(e)
+                print(f"❌ OAuth Debug - Non-network error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {error_str}")
+                raise
         
         if not auth_response:
             raise Exception(f"WorkOS authentication failed after {max_retries} attempts: {last_error}")

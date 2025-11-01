@@ -196,7 +196,7 @@ export default function VirtualTryOnScreen() {
   // Suggestions: fetch compatible items when first item is selected
   // Use cached data when available (React Query provides cached data even while refetching)
   // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/caching
-  const { data: suggestionsData, isLoading: isLoadingSuggestions, isFetching: isFetchingSuggestions } = useTryOnSuggestions(
+  const { data: suggestionsData, isLoading: isLoadingSuggestions, isFetching: isFetchingSuggestions, error: suggestionsError } = useTryOnSuggestions(
     selectedItem?.category || null,
     selectedItem?.colors || null,
     user?.id ?? 0,
@@ -684,8 +684,12 @@ export default function VirtualTryOnScreen() {
               )}
             </ThemedText>
             
-            {/* Show loading ONLY if we have no cached data */}
-            {isLoadingSuggestions && !suggestionsData ? (
+            {/* Show error state if fetch failed (non-critical, suggestions are optional) */}
+            {suggestionsError && !suggestionsData ? (
+              <ThemedText style={[styles.suggestionsSubtitle, { color: '#999', textAlign: 'center', marginVertical: 20 }]}>
+                Unable to load suggestions. Try again later.
+              </ThemedText>
+            ) : isLoadingSuggestions && !suggestionsData ? (
               <ActivityIndicator size="small" color={tintColor} style={styles.suggestionsLoadingIndicator} />
             ) : suggestionsData?.suggestions && suggestionsData.suggestions.length > 0 ? (
               <ScrollView 

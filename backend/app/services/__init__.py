@@ -1,3 +1,4 @@
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from passlib.context import CryptContext
@@ -172,16 +173,22 @@ def update_wardrobe_item_status(db: Session, item: WardrobeItem, status: str) ->
         item.status = ItemStatus.CLEAN
         # Keep last_worn_at and wear_count unchanged
     elif status_upper == "WORN":
-        # Lock the row to prevent concurrent updates from clobbering wear_count
-        # This ensures we read the latest value and increment atomically
-        db.refresh(item, with_for_update=True)
-        
-        item.status = ItemStatus.WORN
-        # Track wear: set timestamp and increment count
-        # Use the freshly locked value to prevent race conditions
-        current_count = item.wear_count or 0
-        item.last_worn_at = datetime.now(timezone.utc)
-        item.wear_count = current_count + 1
+        # Use atomic SQL UPDATE to increment wear_count safely across all database backends
+        # This works on SQLite, PostgreSQL, MySQL, etc. (db.refresh with for_update only works on some)
+        now = datetime.now(timezone.utc)
+        stmt = (
+            update(WardrobeItem)
+            .where(WardrobeItem.id == item.id)
+            .values(
+                status=ItemStatus.WORN,
+                last_worn_at=now,
+                wear_count=func.coalesce(WardrobeItem.wear_count, 0) + 1,
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        db.execute(stmt)
+        # Refresh to get updated values from database
+        db.refresh(item)
     elif status_upper == "DIRTY":
         item.status = ItemStatus.DIRTY
         # Keep last_worn_at and wear_count unchanged

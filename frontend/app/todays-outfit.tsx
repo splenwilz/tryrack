@@ -140,39 +140,86 @@ export default function TodaysOutfitScreen() {
             try {
               const itemIds = Array.from(selectedItemIds);
               
-              // First mark as worn (tracks wear_count), then mark as dirty
+              // First mark as worn (tracks wear_count)
               const wornResult = await batchUpdateMutation.mutateAsync({
                 userId,
                 itemIds,
                 status: 'worn',
               });
               
-              // Then mark as dirty
-              const dirtyResult = await batchUpdateMutation.mutateAsync({
-                userId,
-                itemIds,
-                status: 'dirty',
-              });
-
-              const totalUpdated = Math.min(wornResult.total_updated, dirtyResult.total_updated);
-              const hasErrors = (wornResult.errors && wornResult.errors.length > 0) ||
+              // Only mark dirty the items that successfully became worn
+              const successfulWornIds = wornResult.updated_items.map(item => item.id);
+              
+              if (successfulWornIds.length === 0) {
+                Alert.alert('Error', 'Failed to mark items as worn. Please try again.');
+                return;
+              }
+              
+              // Then mark as dirty - with error recovery
+              try {
+                const dirtyResult = await batchUpdateMutation.mutateAsync({
+                  userId,
+                  itemIds: successfulWornIds,
+                  status: 'dirty',
+                });
+                
+                const totalUpdated = Math.min(wornResult.total_updated, dirtyResult.total_updated);
+                const hasErrors = (wornResult.errors && wornResult.errors.length > 0) ||
                                (dirtyResult.errors && dirtyResult.errors.length > 0);
 
-              if (hasErrors) {
+                if (hasErrors) {
+                  Alert.alert(
+                    'Partial Success',
+                    `Marked ${totalUpdated} item(s) as worn and dirty. Some items failed to update.`,
+                    [{ text: 'OK', onPress: () => router.back() }]
+                  );
+                } else {
+                  Alert.alert(
+                    'Success!',
+                    `Marked ${totalUpdated} item(s) as worn and dirty today.`,
+                    [{ text: 'OK', onPress: () => router.back() }]
+                  );
+                }
+              } catch (dirtyError) {
+                // If marking dirty fails, offer to revert worn items back to clean
+                console.error('Failed to mark items as dirty:', dirtyError);
                 Alert.alert(
-                  'Partial Success',
-                  `Marked ${totalUpdated} item(s) as worn and dirty. Some items failed to update.`,
-                  [{ text: 'OK', onPress: () => router.back() }]
-                );
-              } else {
-                Alert.alert(
-                  'Success!',
-                  `Marked ${totalUpdated} item(s) as worn and dirty today.`,
-                  [{ text: 'OK', onPress: () => router.back() }]
+                  'Partial Update',
+                  `Marked ${wornResult.total_updated} item(s) as worn, but failed to mark as dirty.`,
+                  [
+                    {
+                      text: 'Leave as Worn',
+                      style: 'default',
+                      onPress: () => router.back(),
+                    },
+                    {
+                      text: 'Revert to Clean',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await batchUpdateMutation.mutateAsync({
+                            userId,
+                            itemIds: successfulWornIds,
+                            status: 'clean',
+                          });
+                          Alert.alert('Reverted', 'Items reverted to clean state.', [
+                            { text: 'OK', onPress: () => router.back() }
+                          ]);
+                        } catch (revertError) {
+                          console.error('Failed to revert items:', revertError);
+                          Alert.alert(
+                            'Error',
+                            'Failed to revert items. They remain in "worn" state.',
+                            [{ text: 'OK', onPress: () => router.back() }]
+                          );
+                        }
+                      },
+                    },
+                  ]
                 );
               }
             } catch (error) {
-              console.error('Failed to mark items as worn and dirty:', error);
+              console.error('Failed to mark items as worn:', error);
               Alert.alert('Error', 'Failed to update items. Please try again.');
             }
           },

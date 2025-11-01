@@ -5,9 +5,10 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useWardrobeItem, useDeleteWardrobeItem, useUpdateWardrobeItemStatus } from '@/hooks/useWardrobe';
+import { useWardrobeItem, useDeleteWardrobeItem, useUpdateWardrobeItemStatus, useBatchUpdateStatus } from '@/hooks/useWardrobe';
 import { useUser } from '@/hooks/useAuthQuery';
 import { ActivityIndicator } from 'react-native';
+import { formatLastWornWithFallback } from '@/utils/dateFormatting';
 
 const { width } = Dimensions.get('window');
 
@@ -31,6 +32,7 @@ export default function WardrobeItemDetailScreen() {
   const { data: item, isLoading: isItemLoading, isFetching, error } = useWardrobeItem(itemIdNum, userId);
   const deleteMutation = useDeleteWardrobeItem();
   const updateStatusMutation = useUpdateWardrobeItemStatus();
+  const batchUpdateMutation = useBatchUpdateStatus();
   
   const handleBackPress = () => {
     router.back();
@@ -83,11 +85,64 @@ export default function WardrobeItemDetailScreen() {
           style: 'default',
           onPress: async () => {
             try {
-              // Mark as worn first (tracks wear_count), then mark as dirty
-              await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'worn' });
-              await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'dirty' });
-              Alert.alert('Updated', `"${item.title}" marked as worn and dirty`);
-            } catch {
+              const itemIds = [item.id];
+              
+              // First mark as worn (tracks wear_count)
+              const wornResult = await batchUpdateMutation.mutateAsync({
+                userId,
+                itemIds,
+                status: 'worn',
+              });
+              
+              // Only proceed if worn update succeeded
+              if (wornResult.updated_items.length === 0) {
+                Alert.alert('Error', 'Failed to mark as worn. Please try again.');
+                return;
+              }
+              
+              // Then mark as dirty - with error recovery
+              try {
+                await batchUpdateMutation.mutateAsync({
+                  userId,
+                  itemIds,
+                  status: 'dirty',
+                });
+                
+                Alert.alert('Updated', `"${item.title}" marked as worn and dirty`);
+              } catch (dirtyError) {
+                // If marking dirty fails, offer to revert to clean
+                console.error('Failed to mark as dirty:', dirtyError);
+                Alert.alert(
+                  'Partial Update',
+                  `"${item.title}" marked as worn, but failed to mark as dirty.`,
+                  [
+                    {
+                      text: 'Leave as Worn',
+                      style: 'default',
+                      onPress: () => {},
+                    },
+                    {
+                      text: 'Revert to Clean',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await batchUpdateMutation.mutateAsync({
+                            userId,
+                            itemIds,
+                            status: 'clean',
+                          });
+                          Alert.alert('Reverted', `"${item.title}" reverted to clean state.`);
+                        } catch (revertError) {
+                          console.error('Failed to revert:', revertError);
+                          Alert.alert('Error', 'Failed to revert. Item remains in "worn" state.');
+                        }
+                      },
+                    },
+                  ]
+                );
+              }
+            } catch (error) {
+              console.error('Failed to mark as worn:', error);
               Alert.alert('Error', 'Failed to update status. Please try again.');
             }
           },
@@ -121,32 +176,6 @@ export default function WardrobeItemDetailScreen() {
     }
   };
 
-  // Helper to format last worn date
-  const formatLastWorn = (lastWornAt?: string): string => {
-    if (!lastWornAt) return 'Never worn';
-    try {
-      const lastWorn = new Date(lastWornAt);
-      const now = new Date();
-      const diffTime = Math.abs(now.getTime() - lastWorn.getTime());
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (diffDays === 0) return 'Today';
-      if (diffDays === 1) return 'Yesterday';
-      if (diffDays < 7) return `${diffDays} days ago`;
-      if (diffDays < 30) {
-        const weeks = Math.floor(diffDays / 7);
-        return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
-      }
-      if (diffDays < 365) {
-        const months = Math.floor(diffDays / 30);
-        return `${months} ${months === 1 ? 'month' : 'months'} ago`;
-      }
-      const years = Math.floor(diffDays / 365);
-      return `${years} ${years === 1 ? 'year' : 'years'} ago`;
-    } catch {
-      return 'Never worn';
-    }
-  };
 
   const handleEditItem = () => {
     if (!item) return;
@@ -408,7 +437,7 @@ export default function WardrobeItemDetailScreen() {
                   <View style={styles.wearHistoryText}>
                     <ThemedText style={styles.wearHistoryLabel}>Last Worn</ThemedText>
                     <ThemedText style={[styles.wearHistoryValue, { color: tintColor }]}>
-                      {formatLastWorn(item.last_worn_at)}
+                      {formatLastWornWithFallback(item.last_worn_at)}
                     </ThemedText>
                   </View>
                 </View>
