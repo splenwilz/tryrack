@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { ScrollView, StyleSheet, View, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
@@ -8,6 +8,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router } from 'expo-router';
 import { useWardrobeItems, useUpdateWardrobeItemStatus } from '@/hooks/useWardrobe';
 import { useUser } from '@/hooks/useAuthQuery';
+import { WardrobeFilterModal } from '@/components/home/WardrobeFilterModal';
+import type { WardrobeFilters } from '@/components/home/WardrobeFilterModal';
 
 // Legacy interface for compatibility with existing code
 interface WardrobeItemCard {
@@ -19,6 +21,8 @@ interface WardrobeItemCard {
   colors: string[];
   tags: string[];
   status: 'clean' | 'dirty' | 'worn';
+  last_worn_at?: string;  // ISO datetime string
+  wear_count?: number;
   created_at?: string;
 }
 
@@ -27,8 +31,9 @@ interface WardrobeItemCard {
 // Wardrobe Item Card Component - displays personal wardrobe items with status management
 const WardrobeItemCard: React.FC<{ 
   item: WardrobeItemCard; 
-  onStatusChange?: (itemId: string, newStatus: 'clean' | 'worn') => void;
-}> = ({ item, onStatusChange }) => {
+  onStatusChange?: (itemId: string, newStatus: 'clean' | 'worn' | 'dirty') => void;
+  formatLastWorn?: (lastWornAt?: string) => string | null;
+}> = ({ item, onStatusChange, formatLastWorn }) => {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   
@@ -73,6 +78,21 @@ const WardrobeItemCard: React.FC<{
         <ThemedText style={styles.itemTitle} numberOfLines={2}>
           {item.title}
         </ThemedText>
+        {/* Last worn / Wear count info */}
+        {((item.last_worn_at && formatLastWorn && formatLastWorn(item.last_worn_at)) || (item.wear_count && item.wear_count > 0)) ? (
+          <View style={styles.wearInfo}>
+            {formatLastWorn && item.last_worn_at && formatLastWorn(item.last_worn_at) ? (
+              <ThemedText style={styles.wearInfoText}>
+                {formatLastWorn(item.last_worn_at)}
+              </ThemedText>
+            ) : null}
+            {item.wear_count && item.wear_count > 0 ? (
+              <ThemedText style={styles.wearInfoText}>
+                • Worn {item.wear_count} {item.wear_count === 1 ? 'time' : 'times'}
+              </ThemedText>
+            ) : null}
+          </View>
+        ) : null}
         <View style={styles.itemTags}>
           {item.tags.slice(0, 2).map((tag) => (
             <View key={tag} style={styles.tag}>
@@ -90,9 +110,10 @@ const WardrobeCarousel: React.FC<{
   title: string; 
   items: WardrobeItemCard[]; 
   onViewAll?: () => void;
-  onStatusChange?: (itemId: string, newStatus: 'clean' | 'worn') => void;
+  onStatusChange?: (itemId: string, newStatus: 'clean' | 'worn' | 'dirty') => void;
+  formatLastWorn?: (lastWornAt?: string) => string | null;
   style?: object;
-}> = ({ title, items, onViewAll, onStatusChange, style }) => {
+}> = ({ title, items, onViewAll, onStatusChange, formatLastWorn, style }) => {
   const tintColor = useThemeColor({}, 'tint');
   
   return (
@@ -111,7 +132,7 @@ const WardrobeCarousel: React.FC<{
         contentContainerStyle={styles.carouselContent}
       >
         {items.map((item) => (
-          <WardrobeItemCard key={item.id} item={item} onStatusChange={onStatusChange} />
+          <WardrobeItemCard key={item.id} item={item} onStatusChange={onStatusChange} formatLastWorn={formatLastWorn} />
         ))}
       </ScrollView>
     </View>
@@ -192,17 +213,133 @@ const EmptyWardrobeState: React.FC = () => {
 export default function WardrobeScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
+  const textColor = useThemeColor({}, 'text');
+  const borderColor = useThemeColor({}, 'tabIconDefault');
   
   // Get current user
   const { data: user } = useUser();
   const userId = user?.id ?? 0; // Wait for real authenticated user
   
   // Fetch wardrobe items from API
-  const { data: apiItems = [], isLoading, error } = useWardrobeItems(userId);
+  // Use cached data when available (React Query provides cached data even while refetching)
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/caching
+  const { data: apiItems, isLoading, isFetching, error } = useWardrobeItems(userId);
   const updateStatusMutation = useUpdateWardrobeItemStatus();
   
-  // Convert API items to display format (compatible with existing components)
-  const wardrobeItems: WardrobeItemCard[] = apiItems.map(item => ({
+  // Use cached data if available, fallback to empty array only when we know there's no data
+  // Memoize to prevent unnecessary re-renders and dependency changes in useMemo hooks
+  // Reference: React Query data is stable, but ?? creates new array reference each render
+  const items = useMemo(() => apiItems ?? [], [apiItems]);
+  
+  // Filter state
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [filters, setFilters] = useState<WardrobeFilters>({
+    searchQuery: '',
+    status: 'all',
+    category: null,
+    color: null,
+    tag: null,
+    lastWornFilter: 'all',
+  });
+  
+  // Extract available filter options from wardrobe items
+  const { availableCategories, availableColors, availableTags } = useMemo(() => {
+    const categories = new Set<string>();
+    const colors = new Set<string>();
+    const tags = new Set<string>();
+    
+    items.forEach(item => {
+      if (item.category && item.category !== 'processing') {
+        categories.add(item.category.toLowerCase().trim());
+      }
+      if (item.colors) {
+        item.colors.forEach(color => {
+          colors.add(color.toLowerCase().trim());
+        });
+      }
+      if (item.tags) {
+        item.tags.forEach(tag => {
+          tags.add(tag.toLowerCase().trim());
+        });
+      }
+    });
+    
+    return {
+      availableCategories: Array.from(categories).sort(),
+      availableColors: Array.from(colors).sort(),
+      availableTags: Array.from(tags).sort(),
+    };
+  }, [items]);
+  
+  // Apply filters to wardrobe items
+  const filteredItems = useMemo(() => {
+    let filtered = [...items];
+    
+    // Search by title
+    if (filters.searchQuery.trim()) {
+      const query = filters.searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(item =>
+        item.title.toLowerCase().includes(query) ||
+        item.description?.toLowerCase().includes(query) ||
+        item.tags?.some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+    
+    // Filter by status
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(item => item.status === filters.status);
+    }
+    
+    // Filter by category
+    if (filters.category) {
+      filtered = filtered.filter(item =>
+        item.category.toLowerCase().trim() === filters.category?.toLowerCase()
+      );
+    }
+    
+    // Filter by color
+    if (filters.color) {
+      filtered = filtered.filter(item =>
+        item.colors?.some(c => c.toLowerCase().trim() === filters.color?.toLowerCase())
+      );
+    }
+    
+    // Filter by tag
+    if (filters.tag) {
+      filtered = filtered.filter(item =>
+        item.tags?.some(t => t.toLowerCase().trim() === filters.tag?.toLowerCase())
+      );
+    }
+    
+    // Filter by last worn date
+    if (filters.lastWornFilter !== 'all') {
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      filtered = filtered.filter(item => {
+        if (!item.last_worn_at) {
+          return filters.lastWornFilter === 'never';
+        }
+        
+        const lastWorn = new Date(item.last_worn_at);
+        
+        if (filters.lastWornFilter === 'never') {
+          return false; // Already handled above
+        } else if (filters.lastWornFilter === 'recent') {
+          return lastWorn >= thirtyDaysAgo;
+        } else if (filters.lastWornFilter === 'old') {
+          return lastWorn < thirtyDaysAgo;
+        }
+        
+        return true;
+      });
+    }
+    
+    return filtered;
+  }, [items, filters]);
+  
+  // Convert filtered items to display format (compatible with existing components)
+  const wardrobeItems: WardrobeItemCard[] = filteredItems.map(item => ({
     id: item.id.toString(),
     title: item.title,
     category: item.category,
@@ -211,11 +348,93 @@ export default function WardrobeScreen() {
     colors: item.colors || [],
     tags: item.tags || [],
     status: item.status,
+    last_worn_at: item.last_worn_at,
+    wear_count: item.wear_count || 0,
     created_at: item.created_at,
   }));
   
+  // Helper function to format "last worn X days ago"
+  const formatLastWorn = (lastWornAt?: string): string | null => {
+    if (!lastWornAt) return null;
+    try {
+      const lastWorn = new Date(lastWornAt);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - lastWorn.getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays} days ago`;
+      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+      if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+      return `${Math.floor(diffDays / 365)} years ago`;
+    } catch {
+      return null;
+    }
+  };
+  
   // Handler for status changes
-  const handleStatusChange = async (itemId: string, newStatus: 'clean' | 'worn') => {
+  const handleStatusChange = async (itemId: string, newStatus: 'clean' | 'worn' | 'dirty') => {
+    // Special handling for "worn" - show smart prompt
+    if (newStatus === 'worn') {
+      const item = wardrobeItems.find(i => i.id === itemId);
+      const itemTitle = item?.title || 'this item';
+      
+      Alert.alert(
+        'Mark as Worn',
+        `Did you wear "${itemTitle}" today? Mark as dirty too?`,
+        [
+          {
+            text: 'Worn Only',
+            style: 'default',
+            onPress: async () => {
+              try {
+                await updateStatusMutation.mutateAsync({
+                  itemId: parseInt(itemId),
+                  userId,
+                  status: 'worn',
+                });
+                Alert.alert('Item Updated', 'Item marked as worn.');
+              } catch (error) {
+                console.error('Failed to update status:', error);
+                Alert.alert('Error', 'Failed to update item status. Please try again.');
+              }
+            },
+          },
+          {
+            text: 'Worn + Dirty',
+            style: 'default',
+            onPress: async () => {
+              try {
+                // Mark as worn first (tracks wear_count), then mark as dirty
+                await updateStatusMutation.mutateAsync({
+                  itemId: parseInt(itemId),
+                  userId,
+                  status: 'worn',
+                });
+                await updateStatusMutation.mutateAsync({
+                  itemId: parseInt(itemId),
+                  userId,
+                  status: 'dirty',
+                });
+                Alert.alert('Item Updated', 'Item marked as worn and dirty.');
+              } catch (error) {
+                console.error('Failed to update status:', error);
+                Alert.alert('Error', 'Failed to update item status. Please try again.');
+              }
+            },
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ],
+        { cancelable: true }
+      );
+      return;
+    }
+    
+    // Handle clean and dirty status normally (no prompt needed)
     try {
       await updateStatusMutation.mutateAsync({
         itemId: parseInt(itemId),
@@ -223,10 +442,10 @@ export default function WardrobeScreen() {
         status: newStatus,
       });
       
-      if (newStatus === 'worn') {
-        Alert.alert('Item Updated', 'Item marked as worn. Clean it to use in recommendations again.');
-      } else {
+      if (newStatus === 'clean') {
         Alert.alert('Item Updated', 'Item marked as clean and ready for recommendations.');
+      } else {
+        Alert.alert('Item Updated', 'Item marked as dirty. Mark as clean after washing.');
       }
     } catch (error) {
       console.error('Failed to update status:', error);
@@ -259,6 +478,7 @@ export default function WardrobeScreen() {
   }, [wardrobeItems]);
   
   const wornItems = wardrobeItems.filter(item => item.status === 'worn');
+  const dirtyItems = wardrobeItems.filter(item => item.status === 'dirty');
   
   // Featured item (first item from largest category)
   const featuredItem = groupedByCategory.sortedCategories.length > 0 
@@ -270,7 +490,7 @@ export default function WardrobeScreen() {
 
   const handleSearchPress = () => {
     console.log('Search pressed - implement search functionality');
-    // TODO: Navigate to search screen
+    // TODO: Navigate to general search screen (future feature)
   };
 
   const handleNotificationPress = () => {
@@ -278,13 +498,48 @@ export default function WardrobeScreen() {
     // TODO: Navigate to notifications screen
   };
 
+  const handleFilterPress = () => {
+    setShowFilterModal(true);
+  };
+
+  const handleApplyFilters = (newFilters: WardrobeFilters) => {
+    setFilters(newFilters);
+  };
+
+  const handleClearFilters = () => {
+    setFilters({
+      searchQuery: '',
+      status: 'all',
+      category: null,
+      color: null,
+      tag: null,
+      lastWornFilter: 'all',
+    });
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = filters.searchQuery !== '' ||
+    filters.status !== 'all' ||
+    filters.category !== null ||
+    filters.color !== null ||
+    filters.tag !== null ||
+    filters.lastWornFilter !== 'all';
+
   const handleViewAll = (category: string) => {
     console.log(`View all ${category} pressed`);
     router.push(`/category?category=${category}`);
   };
 
-  // Show loading state
-  if (isLoading) {
+  // Show loading state ONLY if we have no cached data AND it's loading
+  // If we have cached data, show it immediately even while refetching
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/displaying-cached-data
+  const showLoadingState = isLoading && !apiItems;
+  
+  // Show error state (but still show cached data if available)
+  const showErrorState = error && !apiItems;
+
+  // Show loading state only when there's no cached data
+  if (showLoadingState) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader
@@ -301,8 +556,8 @@ export default function WardrobeScreen() {
     );
   }
 
-  // Show error state
-  if (error) {
+  // Show error state only when there's no cached data to show
+  if (showErrorState) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader
@@ -321,8 +576,10 @@ export default function WardrobeScreen() {
     );
   }
 
-  // Show empty state if no items (for new users)
-  if (wardrobeItems.length === 0) {
+  // Show empty state ONLY if we have no items AND we're not loading/fetching
+  // This ensures we don't flash empty state while data is being fetched
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/placeholder-query-data
+  if (items.length === 0 && !isLoading && !isFetching) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader
@@ -346,8 +603,112 @@ export default function WardrobeScreen() {
       />
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Show subtle loading indicator if refetching in background */}
+        {isFetching && !isLoading && items.length > 0 && (
+          <View style={styles.refetchIndicator}>
+            <ActivityIndicator size="small" color={tintColor} />
+            <ThemedText style={styles.refetchText}>Updating...</ThemedText>
+          </View>
+        )}
+        
+        {/* Filter Bar */}
+        <View style={styles.filterBar}>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              { backgroundColor, borderColor },
+              hasActiveFilters && { borderColor: tintColor, borderWidth: 2 },
+            ]}
+            onPress={handleFilterPress}
+          >
+            <IconSymbol
+              name="slider.horizontal.3"
+              size={18}
+              color={hasActiveFilters ? tintColor : borderColor}
+            />
+            <ThemedText
+              style={[
+                styles.filterButtonText,
+                { color: hasActiveFilters ? tintColor : textColor },
+              ]}
+            >
+              Filters
+            </ThemedText>
+            {hasActiveFilters && (
+              <View style={[styles.filterBadge, { backgroundColor: tintColor }]}>
+                <ThemedText style={styles.filterBadgeText}>
+                  {[
+                    filters.searchQuery && 'Search',
+                    filters.status !== 'all' && filters.status,
+                    filters.category && 'Category',
+                    filters.color && 'Color',
+                    filters.tag && 'Tag',
+                    filters.lastWornFilter !== 'all' && 'Date',
+                  ].filter(Boolean).length}
+                </ThemedText>
+              </View>
+            )}
+          </TouchableOpacity>
+          
+          {hasActiveFilters && (
+            <TouchableOpacity
+              style={styles.clearFiltersButton}
+              onPress={handleClearFilters}
+            >
+              <ThemedText style={[styles.clearFiltersText, { color: tintColor }]}>
+                Clear All
+              </ThemedText>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filter Summary (when active) */}
+        {hasActiveFilters && (
+          <View style={styles.filterSummary}>
+            <ThemedText style={styles.filterSummaryText}>
+              {filteredItems.length > 0 
+                ? `Showing ${filteredItems.length} of ${items.length} items`
+                : 'No items match your filters'
+              }
+            </ThemedText>
+          </View>
+        )}
+
+        {/* Empty state for filtered results */}
+        {hasActiveFilters && filteredItems.length === 0 && items.length > 0 && (
+          <View style={styles.emptyFilterState}>
+            <IconSymbol name="magnifyingglass" size={48} color={borderColor} style={{ opacity: 0.3, marginBottom: 16 }} />
+            <ThemedText type="subtitle" style={styles.emptyFilterTitle}>No items found</ThemedText>
+            <ThemedText style={styles.emptyFilterText}>
+              Try adjusting your filters or search query
+            </ThemedText>
+            <TouchableOpacity
+              style={[styles.clearFiltersButtonInline, { borderColor }]}
+              onPress={handleClearFilters}
+            >
+              <ThemedText style={[styles.clearFiltersTextInline, { color: tintColor }]}>
+                Clear All Filters
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Today's Outfit CTA */}
+        <TouchableOpacity
+          style={[styles.todaysOutfitCTA, { backgroundColor: tintColor }]}
+          onPress={() => router.push('/todays-outfit')}
+          activeOpacity={0.8}
+        >
+          <IconSymbol name="tshirt.fill" size={24} color="white" />
+          <View style={styles.ctaTextContainer}>
+            <ThemedText style={styles.ctaTitle}>Select Today&apos;s Outfit</ThemedText>
+            <ThemedText style={styles.ctaSubtitle}>Quickly mark what you&apos;re wearing</ThemedText>
+          </View>
+          <IconSymbol name="chevron.right" size={20} color="white" />
+        </TouchableOpacity>
+        
         {/* Featured Item */}
-        {featuredItem && featuredItem.imageUrl && (
+        {featuredItem?.imageUrl && (
           <View style={styles.featuredSection}>
             <ThemedText type="subtitle" style={styles.sectionTitle}>Featured</ThemedText>
             <FeaturedWardrobeItem item={featuredItem} />
@@ -390,6 +751,7 @@ export default function WardrobeScreen() {
               items={items}
               onViewAll={() => handleViewAll(category)}
               onStatusChange={handleStatusChange}
+              formatLastWorn={formatLastWorn}
             />
           );
         })}
@@ -403,6 +765,40 @@ export default function WardrobeScreen() {
             </ThemedText>
             <View style={styles.wornGrid}>
               {wornItems.map((item) => (
+                <View key={item.id} style={[styles.wornCard, { backgroundColor }]}>
+                  <Image source={{ uri: item.imageUrl }} style={styles.wornCardImage} />
+                  <View style={styles.wornCardInfo}>
+                    <ThemedText style={styles.wornCardTitle} numberOfLines={2}>
+                      {item.title}
+                    </ThemedText>
+                    {formatLastWorn(item.last_worn_at) && (
+                      <ThemedText style={styles.wornCardSubtitle}>
+                        {formatLastWorn(item.last_worn_at)}
+                      </ThemedText>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.cleanButton, { backgroundColor: tintColor }]}
+                      onPress={() => handleStatusChange(item.id, 'clean')}
+                    >
+                      <IconSymbol name="checkmark.circle.fill" size={14} color="white" />
+                      <ThemedText style={styles.cleanButtonText}>Mark Clean</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+        
+        {/* Dirty Items Section */}
+        {dirtyItems.length > 0 && (
+          <View style={styles.wornSection}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>Dirty Items</ThemedText>
+            <ThemedText style={styles.subtitle}>
+              Mark as clean after washing
+            </ThemedText>
+            <View style={styles.wornGrid}>
+              {dirtyItems.map((item) => (
                 <View key={item.id} style={[styles.wornCard, { backgroundColor }]}>
                   <Image source={{ uri: item.imageUrl }} style={styles.wornCardImage} />
                   <View style={styles.wornCardInfo}>
@@ -434,6 +830,17 @@ export default function WardrobeScreen() {
       >
         <IconSymbol name="plus" size={24} color="white" />
       </TouchableOpacity>
+
+      {/* Filter Modal */}
+      <WardrobeFilterModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        filters={filters}
+        onApplyFilters={handleApplyFilters}
+        availableCategories={availableCategories}
+        availableColors={availableColors}
+        availableTags={availableTags}
+      />
     </SafeAreaView>
   );
 }
@@ -636,6 +1043,119 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
+  todaysOutfitCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 20,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    gap: 12,
+  },
+  ctaTextContainer: {
+    flex: 1,
+  },
+  ctaTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  ctaSubtitle: {
+    color: 'white',
+    fontSize: 12,
+    opacity: 0.9,
+  },
+  wearInfo: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  wearInfoText: {
+    fontSize: 11,
+    opacity: 0.6,
+    marginRight: 4,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  filterBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  filterBadgeText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  clearFiltersButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  clearFiltersText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  filterSummary: {
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  filterSummaryText: {
+    fontSize: 13,
+    opacity: 0.7,
+  },
+  emptyFilterState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyFilterTitle: {
+    marginBottom: 8,
+  },
+  emptyFilterText: {
+    textAlign: 'center',
+    opacity: 0.7,
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  clearFiltersButtonInline: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  clearFiltersTextInline: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
   // Status Management Styles
   statusBadge: {
     position: 'absolute',
@@ -685,6 +1205,11 @@ const styles = StyleSheet.create({
   wornCardInfo: {
     padding: 12,
   },
+  wornCardSubtitle: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginBottom: 8,
+  },
   wornCardTitle: {
     fontSize: 14,
     fontWeight: '500',
@@ -724,5 +1249,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.7,
     textAlign: 'center',
+  },
+  // Background refetch indicator
+  refetchIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 8,
+  },
+  refetchText: {
+    fontSize: 12,
+    opacity: 0.6,
   },
 });

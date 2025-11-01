@@ -194,7 +194,9 @@ export default function VirtualTryOnScreen() {
     : null;
   
   // Suggestions: fetch compatible items when first item is selected
-  const { data: suggestionsData, isLoading: isLoadingSuggestions } = useTryOnSuggestions(
+  // Use cached data when available (React Query provides cached data even while refetching)
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/caching
+  const { data: suggestionsData, isLoading: isLoadingSuggestions, isFetching: isFetchingSuggestions } = useTryOnSuggestions(
     selectedItem?.category || null,
     selectedItem?.colors || null,
     user?.id ?? 0,
@@ -677,11 +679,15 @@ export default function VirtualTryOnScreen() {
             </ThemedText>
             <ThemedText style={[styles.suggestionsSubtitle, { color: '#999' }]}>
               Add items to create a complete outfit
+              {isFetchingSuggestions && !isLoadingSuggestions && suggestionsData && (
+                <ThemedText style={{ fontSize: 11, opacity: 0.6 }}> • Updating...</ThemedText>
+              )}
             </ThemedText>
             
-            {isLoadingSuggestions ? (
+            {/* Show loading ONLY if we have no cached data */}
+            {isLoadingSuggestions && !suggestionsData ? (
               <ActivityIndicator size="small" color={tintColor} style={{ marginVertical: 20 }} />
-            ) : suggestionsData && suggestionsData.suggestions && suggestionsData.suggestions.length > 0 ? (
+            ) : suggestionsData?.suggestions && suggestionsData.suggestions.length > 0 ? (
               <ScrollView 
                 horizontal 
                 showsHorizontalScrollIndicator={false}
@@ -732,9 +738,12 @@ export default function VirtualTryOnScreen() {
                 ))}
               </ScrollView>
             ) : (
-              <ThemedText style={[styles.suggestionsSubtitle, { color: '#999', textAlign: 'center', marginVertical: 20 }]}>
-                No compatible items found in your wardrobe. Add more items to get suggestions!
-              </ThemedText>
+              // Only show empty state if we're not loading and have no data
+              !isLoadingSuggestions && (
+                <ThemedText style={[styles.suggestionsSubtitle, { color: '#999', textAlign: 'center', marginVertical: 20 }]}>
+                  No compatible items found in your wardrobe. Add more items to get suggestions!
+                </ThemedText>
+              )
             )}
           </View>
         )}

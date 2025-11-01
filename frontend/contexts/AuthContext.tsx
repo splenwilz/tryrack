@@ -8,7 +8,8 @@ import {
   storeUserData, 
   getUserData, 
   clearAllAuthData, 
-  validateStoredToken 
+  validateStoredToken,
+  getRefreshToken 
 } from '@/utils/secureStorage';
 
 /**
@@ -110,9 +111,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(storedUser as User);
           }
         } else {
-          // Token is invalid or missing, clear all auth data
-          console.log('🔍 Auth Debug - Token invalid, clearing auth data');
-          await clearAllAuthData();
+          // Token is expired or invalid, check if refresh token exists
+          // If refresh token exists, keep user data and let API client refresh token when connection returns
+          const refreshToken = await getRefreshToken();
+          if (refreshToken) {
+            console.log('🔍 Auth Debug - Token expired but refresh token available, keeping user data');
+            // Keep user data - API client will auto-refresh token when making requests
+            const storedUser = await getUserData();
+            if (storedUser) {
+              setUser(storedUser as User);
+            }
+          } else {
+            // No refresh token, clear all auth data (user needs to sign in again)
+            console.log('🔍 Auth Debug - Token invalid and no refresh token, clearing auth data');
+            await clearAllAuthData();
+          }
         }
       } catch (error) {
         console.error('🔍 Auth Debug - Error checking auth state:', error);
@@ -383,11 +396,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         setUser(userData);
         
-        // Store user data and access token securely
+        // Store user data, access token, and refresh token securely
         // Based on Expo SecureStore documentation for sensitive data
+        // Refresh token allows seamless token renewal for up to 7 days without re-authentication
         await Promise.all([
           storeUserData(userData),
-          storeAccessToken(oauthResult.access_token)
+          storeAccessToken(oauthResult.access_token),
+          storeRefreshToken(oauthResult.refresh_token) // Store refresh token for automatic token refresh
         ]);
         
         return { success: true };

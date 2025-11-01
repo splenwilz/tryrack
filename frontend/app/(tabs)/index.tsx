@@ -1,5 +1,5 @@
 import type React from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -7,6 +7,9 @@ import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router } from 'expo-router';
 import type { BoutiqueItem } from '@/lib/boutiqueData';
+import { useWardrobeItems } from '@/hooks/useWardrobe';
+import { useUser } from '@/hooks/useAuthQuery';
+import { useMemo } from 'react';
 
 // Interfaces for home feed data
 interface OutfitRecommendation {
@@ -102,35 +105,33 @@ const mockOutfitRecommendations: OutfitRecommendation[] = [
   }
 ];
 
-const mockWardrobeHighlights: WardrobeHighlight[] = [
-  {
-    id: '1',
-    title: 'White Cotton T-Shirt',
-    imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=200&h=200&fit=crop',
-    category: 'top',
-    lastWorn: '2 days ago',
-    wearCount: 12,
-    isNew: false
-  },
-  {
-    id: '2',
-    title: 'Black Little Dress',
-    imageUrl: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=200&h=200&fit=crop',
-    category: 'dress',
-    lastWorn: '1 week ago',
-    wearCount: 8,
-    isNew: false
-  },
-  {
-    id: '3',
-    title: 'Blue Denim Jacket',
-    imageUrl: 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=200&h=200&fit=crop',
-    category: 'outerwear',
-    lastWorn: '3 days ago',
-    wearCount: 15,
-    isNew: true
-  }
-];
+// Helper function to format last worn date
+const formatLastWornDate = (lastWornAt?: string): string | undefined => {
+  if (!lastWornAt) return undefined;
+  
+  const date = new Date(lastWornAt);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - date.getTime());
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 14) return '1 week ago';
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  return `${Math.floor(diffDays / 365)} years ago`;
+};
+
+// Helper function to check if item is new (added in last 7 days)
+const isItemNew = (createdAt?: string): boolean => {
+  if (!createdAt) return false;
+  const date = new Date(createdAt);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - date.getTime());
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays <= 7;
+};
 
 const mockBoutiqueDiscoveries: BoutiqueDiscovery[] = [
   {
@@ -262,8 +263,7 @@ const WardrobeHighlightCard: React.FC<{ item: WardrobeHighlight }> = ({ item }) 
   const tintColor = useThemeColor({}, 'tint');
 
   const handleViewItem = () => {
-    console.log(`View item: ${item.title}`);
-    // TODO: Navigate to item details
+    router.push(`/wardrobe-item-detail?itemId=${item.id}`);
   };
 
   return (
@@ -361,6 +361,49 @@ export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
 
+  // Get current user
+  const { data: user } = useUser();
+  const userId = user?.id ?? 0;
+
+  // Fetch wardrobe items from API
+  const { data: wardrobeItems = [], isLoading: isLoadingWardrobe } = useWardrobeItems(userId);
+
+  // Transform wardrobe items to highlights format
+  const wardrobeHighlights = useMemo(() => {
+    if (!wardrobeItems || wardrobeItems.length === 0) return [];
+
+    // Filter out processing items
+    const validItems = wardrobeItems.filter(
+      item => item.category !== 'processing' && (item.image_clean || item.image_original)
+    );
+
+    // Sort by: most worn first, then by newest
+    const sorted = [...validItems].sort((a, b) => {
+      // First, sort by wear count (descending)
+      const aWearCount = a.wear_count || 0;
+      const bWearCount = b.wear_count || 0;
+      if (aWearCount !== bWearCount) {
+        return bWearCount - aWearCount;
+      }
+      
+      // If same wear count, sort by newest (created_at descending)
+      const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bCreated - aCreated;
+    });
+
+    // Take top 6 items (most-worn or newest)
+    return sorted.slice(0, 6).map((item): WardrobeHighlight => ({
+      id: item.id.toString(),
+      title: item.title,
+      imageUrl: item.image_clean || item.image_original || '',
+      category: item.category,
+      lastWorn: formatLastWornDate(item.last_worn_at),
+      wearCount: item.wear_count || 0,
+      isNew: isItemNew(item.created_at),
+    }));
+  }, [wardrobeItems]);
+
   const handleSearchPress = () => {
     console.log('Search pressed - implement search functionality');
     // TODO: Navigate to search screen
@@ -449,9 +492,14 @@ export default function HomeScreen() {
               Your most-worn and newest items
         </ThemedText>
           </View>
-          {mockWardrobeHighlights.length > 0 ? (
+          {isLoadingWardrobe ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={tintColor} />
+              <ThemedText style={styles.loadingText}>Loading wardrobe...</ThemedText>
+            </View>
+          ) : wardrobeHighlights.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.highlightsScroll}>
-              {mockWardrobeHighlights.map((item) => (
+              {wardrobeHighlights.map((item) => (
                 <WardrobeHighlightCard key={item.id} item={item} />
               ))}
             </ScrollView>
@@ -924,5 +972,16 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    opacity: 0.7,
   },
 });

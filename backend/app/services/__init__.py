@@ -153,14 +153,29 @@ def update_wardrobe_item(db: Session, item: WardrobeItem, item_update: WardrobeI
 
 
 def update_wardrobe_item_status(db: Session, item: WardrobeItem, status: str) -> WardrobeItem:
-    """Update wardrobe item status."""
+    """Update wardrobe item status and track wear history.
+    
+    When status is "WORN":
+    - Sets last_worn_at to current timestamp
+    - Increments wear_count
+    
+    When status is "CLEAN" or "DIRTY":
+    - Only updates status, preserves last_worn_at and wear_count
+    """
+    from datetime import datetime, timezone
+    
     status_upper = status.upper()
     if status_upper == "CLEAN":
         item.status = ItemStatus.CLEAN
+        # Keep last_worn_at and wear_count unchanged
     elif status_upper == "WORN":
         item.status = ItemStatus.WORN
+        # Track wear: set timestamp and increment count
+        item.last_worn_at = datetime.now(timezone.utc)
+        item.wear_count = (item.wear_count or 0) + 1
     elif status_upper == "DIRTY":
         item.status = ItemStatus.DIRTY
+        # Keep last_worn_at and wear_count unchanged
     else:
         raise ValueError(f"Invalid status: {status}")
     

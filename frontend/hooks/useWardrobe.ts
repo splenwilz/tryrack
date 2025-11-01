@@ -36,6 +36,8 @@ export interface WardrobeItem {
   status: 'clean' | 'worn' | 'dirty';
   processing_status: 'pending' | 'processing' | 'completed' | 'failed';  // 🤖
   ai_suggestions?: AISuggestions;  // 🤖
+  last_worn_at?: string;  // ISO datetime string
+  wear_count?: number;  // Total number of times item has been worn
   created_at: string;
   updated_at?: string;
 }
@@ -260,6 +262,41 @@ export const useUpdateWardrobeItemStatus = () => {
       // Update the specific item in cache
       queryClient.setQueryData(['wardrobe', variables.itemId, variables.userId], data);
       // Invalidate list to refetch
+      queryClient.invalidateQueries({ queryKey: ['wardrobe'] });
+    },
+  });
+};
+
+/**
+ * Batch update wardrobe items status mutation
+ * Useful for marking multiple items (entire outfit) as worn at once
+ */
+export const useBatchUpdateStatus = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    {
+      updated_items: WardrobeItem[];
+      errors: string[] | null;
+      total_updated: number;
+      total_requested: number;
+    },
+    Error,
+    { userId: number; itemIds: number[]; status: 'clean' | 'worn' | 'dirty' }
+  >({
+    mutationFn: async ({ userId, itemIds, status }) => {
+      return apiClient.patch<{
+        updated_items: WardrobeItem[];
+        errors: string[] | null;
+        total_updated: number;
+        total_requested: number;
+      }>(
+        `/wardrobe/batch-status?user_id=${userId}`,
+        { item_ids: itemIds, status }
+      );
+    },
+    onSuccess: () => {
+      // Invalidate all wardrobe queries to refetch updated data
       queryClient.invalidateQueries({ queryKey: ['wardrobe'] });
     },
   });

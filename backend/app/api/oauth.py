@@ -117,11 +117,49 @@ async def oauth_callback(
         print(f"🔍 OAuth Debug - Received code: {code}")
         print(f"🔍 OAuth Debug - Received state: {state}")
         
-        # Authenticate with WorkOS using the authorization code
+        # Authenticate with WorkOS using the authorization code with retry logic
+        # Retry on network/DNS errors (transient failures)
         # Documentation: https://workos.com/docs/authkit/react/python/2-add-authkit-to-your-app/add-a-callback-endpoint
-        auth_response = workos_client.user_management.authenticate_with_code(
-            code=code
-        )
+        import time
+        max_retries = 3
+        retry_delay = 1  # Start with 1 second delay
+        
+        auth_response = None
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"🔍 OAuth Debug - WorkOS authentication attempt {attempt + 1}/{max_retries}")
+                auth_response = workos_client.user_management.authenticate_with_code(
+                    code=code
+                )
+                print(f"🔍 OAuth Debug - WorkOS auth response received successfully")
+                break  # Success, exit retry loop
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                # Check if it's a network/DNS error (retryable)
+                is_network_error = (
+                    "nodename nor servname" in error_str or
+                    "network" in error_str.lower() or
+                    "DNS" in error_str or
+                    "connection" in error_str.lower() or
+                    "timeout" in error_str.lower()
+                )
+                
+                if is_network_error and attempt < max_retries - 1:
+                    # Retry with exponential backoff
+                    wait_time = retry_delay * (2 ** attempt)
+                    print(f"⚠️ OAuth Debug - Network error (attempt {attempt + 1}/{max_retries}): {error_str}")
+                    print(f"🔄 OAuth Debug - Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    # Non-retryable error or max retries reached
+                    print(f"❌ OAuth Debug - Failed after {attempt + 1} attempts: {error_str}")
+                    raise
+        
+        if not auth_response:
+            raise Exception(f"WorkOS authentication failed after {max_retries} attempts: {last_error}")
         
         print(f"🔍 OAuth Debug - WorkOS auth response: {auth_response}")
         

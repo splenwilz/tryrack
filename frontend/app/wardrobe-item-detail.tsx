@@ -58,12 +58,45 @@ export default function WardrobeItemDetailScreen() {
 
   const handleMarkAsWorn = async () => {
     if (!item) return;
-    try {
-      await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'worn' });
-      Alert.alert('Updated', `"${item.title}" marked as worn`);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to update status. Please try again.');
-    }
+    
+    // Show smart prompt: Ask if item should be marked dirty too
+    Alert.alert(
+      'Mark as Worn',
+      `Did you wear "${item.title}" today? Mark as dirty too?`,
+      [
+        {
+          text: 'Worn Only',
+          style: 'default',
+          onPress: async () => {
+            try {
+              await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'worn' });
+              Alert.alert('Updated', `"${item.title}" marked as worn`);
+            } catch {
+              Alert.alert('Error', 'Failed to update status. Please try again.');
+            }
+          },
+        },
+        {
+          text: 'Worn + Dirty',
+          style: 'default',
+          onPress: async () => {
+            try {
+              // Mark as worn first (tracks wear_count), then mark as dirty
+              await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'worn' });
+              await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'dirty' });
+              Alert.alert('Updated', `"${item.title}" marked as worn and dirty`);
+            } catch {
+              Alert.alert('Error', 'Failed to update status. Please try again.');
+            }
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleMarkAsClean = async () => {
@@ -71,8 +104,38 @@ export default function WardrobeItemDetailScreen() {
     try {
       await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'clean' });
       Alert.alert('Updated', `"${item.title}" marked as clean`);
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Failed to update status. Please try again.');
+    }
+  };
+
+  const handleMarkAsDirty = async () => {
+    if (!item) return;
+    try {
+      await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'dirty' });
+      Alert.alert('Updated', `"${item.title}" marked as dirty. Mark as clean after washing.`);
+    } catch {
+      Alert.alert('Error', 'Failed to update status. Please try again.');
+    }
+  };
+
+  // Helper to format last worn date
+  const formatLastWorn = (lastWornAt?: string): string => {
+    if (!lastWornAt) return 'Never worn';
+    try {
+      const lastWorn = new Date(lastWornAt);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - lastWorn.getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays} days ago`;
+      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+      if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+      return `${Math.floor(diffDays / 365)} years ago`;
+    } catch {
+      return 'Never worn';
     }
   };
 
@@ -247,12 +310,35 @@ export default function WardrobeItemDetailScreen() {
               >
                 <IconSymbol name="tshirt.fill" size={18} color={tintColor} />
                 <ThemedText style={[styles.secondaryButtonText, { color: tintColor }]}>
-                  Mark as Worn
+                  Mark as Worn Today
                 </ThemedText>
               </TouchableOpacity>
             )}
             
             {item.status === 'worn' && (
+              <>
+                <TouchableOpacity 
+                  style={[styles.secondaryButton, { borderColor }]}
+                  onPress={handleMarkAsClean}
+                >
+                  <IconSymbol name="checkmark.circle.fill" size={18} color={tintColor} />
+                  <ThemedText style={[styles.secondaryButtonText, { color: tintColor }]}>
+                    Mark as Clean
+                  </ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.secondaryButton, { borderColor }]}
+                  onPress={handleMarkAsDirty}
+                >
+                  <IconSymbol name="exclamationmark.circle.fill" size={18} color="#FF3B30" />
+                  <ThemedText style={[styles.secondaryButtonText, { color: '#FF3B30' }]}>
+                    Mark as Dirty
+                  </ThemedText>
+                </TouchableOpacity>
+              </>
+            )}
+            
+            {item.status === 'dirty' && (
               <TouchableOpacity 
                 style={[styles.secondaryButton, { borderColor }]}
                 onPress={handleMarkAsClean}
@@ -284,6 +370,37 @@ export default function WardrobeItemDetailScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Wear Tracking Section */}
+        {(item.last_worn_at || ((item.wear_count ?? 0) > 0)) && (
+          <View style={[styles.detailsCard, { backgroundColor }]}>
+            <ThemedText style={styles.detailBlockLabel}>WEAR HISTORY</ThemedText>
+            <View style={styles.wearHistoryRow}>
+              {item.last_worn_at && (
+                <View style={styles.wearHistoryItem}>
+                  <IconSymbol name="calendar" size={16} color={tintColor} />
+                  <View style={styles.wearHistoryText}>
+                    <ThemedText style={styles.wearHistoryLabel}>Last Worn</ThemedText>
+                    <ThemedText style={[styles.wearHistoryValue, { color: tintColor }]}>
+                      {formatLastWorn(item.last_worn_at)}
+                    </ThemedText>
+                  </View>
+                </View>
+              )}
+              {((item.wear_count ?? 0) > 0) ? (
+                <View style={styles.wearHistoryItem}>
+                  <IconSymbol name="tshirt.fill" size={16} color={tintColor} />
+                  <View style={styles.wearHistoryText}>
+                    <ThemedText style={styles.wearHistoryLabel}>Total Wears</ThemedText>
+                    <ThemedText style={[styles.wearHistoryValue, { color: tintColor }]}>
+                      {item.wear_count} {item.wear_count === 1 ? 'time' : 'times'}
+                    </ThemedText>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        )}
 
         {/* Item Metadata */}
         <View style={styles.metadataSection}>
@@ -562,6 +679,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.6,
     marginBottom: 4,
+  },
+  wearHistoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+  },
+  wearHistoryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  wearHistoryText: {
+    flexDirection: 'column',
+  },
+  wearHistoryLabel: {
+    fontSize: 11,
+    opacity: 0.6,
+    marginBottom: 2,
+  },
+  wearHistoryValue: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

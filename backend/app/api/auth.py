@@ -449,28 +449,40 @@ async def refresh_token(
     
     Industry best practices:
     - Token rotation: New refresh token issued, old one revoked
-    - Short-lived access tokens (15 min) + long-lived refresh tokens (7 days)
+    - Short-lived access tokens (15 minutes) + long-lived refresh tokens (7 days)
     - Secure: Refresh tokens stored hashed in database
     
     Returns new access_token and refresh_token (token rotation).
     """
+    print("🔄 Token Refresh Debug - Refresh endpoint called")
+    print(f"🔄 Token Refresh Debug - Received refresh token (length: {len(request.refresh_token)})")
+    
     # Verify refresh token is valid and not revoked/expired
     refresh_token_record = verify_refresh_token(db, request.refresh_token)
     
     if not refresh_token_record:
+        print("❌ Token Refresh Debug - Invalid or expired refresh token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
         )
     
+    print(f"✅ Token Refresh Debug - Refresh token valid for user_id: {refresh_token_record.user_id}")
+    print(f"🔄 Token Refresh Debug - Revoking old refresh token (token rotation)")
+    
     # Revoke old refresh token (token rotation for security)
     revoke_refresh_token(db, request.refresh_token)
     
+    print("🔄 Token Refresh Debug - Creating new access token...")
     # Create new access token
     access_token = create_access_token(data={"sub": str(refresh_token_record.user_id)})
     
+    print("🔄 Token Refresh Debug - Creating new refresh token (token rotation)...")
     # Create new refresh token (token rotation)
     new_refresh_token_str, _ = create_refresh_token(db, refresh_token_record.user_id)
+    
+    print("✅ Token Refresh Debug - Token refresh successful! Returning new tokens.")
+    print(f"✅ Token Refresh Debug - User remains logged in (refresh token valid for 7 days)")
     
     return RefreshTokenResponse(
         access_token=access_token,
