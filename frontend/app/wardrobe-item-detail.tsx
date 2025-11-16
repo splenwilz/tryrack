@@ -5,9 +5,10 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { CustomHeader } from '@/components/home/CustomHeader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useWardrobeItem, useDeleteWardrobeItem, useUpdateWardrobeItemStatus } from '@/hooks/useWardrobe';
+import { useWardrobeItem, useDeleteWardrobeItem, useUpdateWardrobeItemStatus, useBatchUpdateStatus } from '@/hooks/useWardrobe';
 import { useUser } from '@/hooks/useAuthQuery';
 import { ActivityIndicator } from 'react-native';
+import { formatLastWornWithFallback } from '@/utils/dateFormatting';
 
 const { width } = Dimensions.get('window');
 
@@ -26,9 +27,12 @@ export default function WardrobeItemDetailScreen() {
   const userId = user?.id || 0;
   const itemIdNum = itemId ? parseInt(itemId) : 0;
   
-  const { data: item, isLoading: isItemLoading, error } = useWardrobeItem(itemIdNum, userId);
+  // Use cached data when available (React Query provides cached data even while refetching)
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/caching
+  const { data: item, isLoading: isItemLoading, isFetching, error } = useWardrobeItem(itemIdNum, userId);
   const deleteMutation = useDeleteWardrobeItem();
   const updateStatusMutation = useUpdateWardrobeItemStatus();
+  const batchUpdateMutation = useBatchUpdateStatus();
   
   const handleBackPress = () => {
     router.back();
@@ -58,12 +62,98 @@ export default function WardrobeItemDetailScreen() {
 
   const handleMarkAsWorn = async () => {
     if (!item) return;
-    try {
-      await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'worn' });
-      Alert.alert('Updated', `"${item.title}" marked as worn`);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to update status. Please try again.');
-    }
+    
+    // Show smart prompt: Ask if item should be marked dirty too
+    Alert.alert(
+      'Mark as Worn',
+      `Did you wear "${item.title}" today? Mark as dirty too?`,
+      [
+        {
+          text: 'Worn Only',
+          style: 'default',
+          onPress: async () => {
+            try {
+              await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'worn' });
+              Alert.alert('Updated', `"${item.title}" marked as worn`);
+            } catch {
+              Alert.alert('Error', 'Failed to update status. Please try again.');
+            }
+          },
+        },
+        {
+          text: 'Worn + Dirty',
+          style: 'default',
+          onPress: async () => {
+            try {
+              const itemIds = [item.id];
+              
+              // First mark as worn (tracks wear_count)
+              const wornResult = await batchUpdateMutation.mutateAsync({
+                userId,
+                itemIds,
+                status: 'worn',
+              });
+              
+              // Only proceed if worn update succeeded
+              if (wornResult.updated_items.length === 0) {
+                Alert.alert('Error', 'Failed to mark as worn. Please try again.');
+                return;
+              }
+              
+              // Then mark as dirty - with error recovery
+              try {
+                await batchUpdateMutation.mutateAsync({
+                  userId,
+                  itemIds,
+                  status: 'dirty',
+                });
+                
+                Alert.alert('Updated', `"${item.title}" marked as worn and dirty`);
+              } catch (dirtyError) {
+                // If marking dirty fails, offer to revert to clean
+                console.error('Failed to mark as dirty:', dirtyError);
+                Alert.alert(
+                  'Partial Update',
+                  `"${item.title}" marked as worn, but failed to mark as dirty.`,
+                  [
+                    {
+                      text: 'Leave as Worn',
+                      style: 'default',
+                      onPress: () => {},
+                    },
+                    {
+                      text: 'Revert to Clean',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await batchUpdateMutation.mutateAsync({
+                            userId,
+                            itemIds,
+                            status: 'clean',
+                          });
+                          Alert.alert('Reverted', `"${item.title}" reverted to clean state.`);
+                        } catch (revertError) {
+                          console.error('Failed to revert:', revertError);
+                          Alert.alert('Error', 'Failed to revert. Item remains in "worn" state.');
+                        }
+                      },
+                    },
+                  ]
+                );
+              }
+            } catch (error) {
+              console.error('Failed to mark as worn:', error);
+              Alert.alert('Error', 'Failed to update status. Please try again.');
+            }
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleMarkAsClean = async () => {
@@ -71,10 +161,21 @@ export default function WardrobeItemDetailScreen() {
     try {
       await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'clean' });
       Alert.alert('Updated', `"${item.title}" marked as clean`);
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Failed to update status. Please try again.');
     }
   };
+
+  const handleMarkAsDirty = async () => {
+    if (!item) return;
+    try {
+      await updateStatusMutation.mutateAsync({ itemId: item.id, userId, status: 'dirty' });
+      Alert.alert('Updated', `"${item.title}" marked as dirty. Mark as clean after washing.`);
+    } catch {
+      Alert.alert('Error', 'Failed to update status. Please try again.');
+    }
+  };
+
 
   const handleEditItem = () => {
     if (!item) return;
@@ -110,7 +211,15 @@ export default function WardrobeItemDetailScreen() {
     );
   };
 
-  if (isUserLoading || isItemLoading || !userId) {
+  // Show loading state ONLY if we have no cached data AND it's loading
+  // If we have cached data, show it immediately even while refetching
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/displaying-cached-data
+  const showLoadingState = (isUserLoading || (isItemLoading && !item) || !userId);
+  
+  // Show error state (but still show cached data if available)
+  const showErrorState = (error || !item) && !item;
+
+  if (showLoadingState) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader title="Item Details" showBackButton={true} onBackPress={handleBackPress} />
@@ -122,7 +231,8 @@ export default function WardrobeItemDetailScreen() {
     );
   }
 
-  if (error || !item) {
+  // Show error state only when there's no cached data to show
+  if (showErrorState) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor }]}>
         <CustomHeader title="Item Details" showBackButton={true} onBackPress={handleBackPress} />
@@ -153,6 +263,14 @@ export default function WardrobeItemDetailScreen() {
       <CustomHeader title="Item Details" showBackButton={true} onBackPress={handleBackPress} />
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Show subtle loading indicator if refetching in background */}
+        {isFetching && !isItemLoading && item && (
+          <View style={styles.refetchIndicator}>
+            <ActivityIndicator size="small" color={tintColor} />
+            <ThemedText style={styles.refetchText}>Updating...</ThemedText>
+          </View>
+        )}
+        
         {/* Item Image */}
         <View style={styles.imageContainer}>
           <Image 
@@ -247,12 +365,35 @@ export default function WardrobeItemDetailScreen() {
               >
                 <IconSymbol name="tshirt.fill" size={18} color={tintColor} />
                 <ThemedText style={[styles.secondaryButtonText, { color: tintColor }]}>
-                  Mark as Worn
+                  Mark as Worn Today
                 </ThemedText>
               </TouchableOpacity>
             )}
             
             {item.status === 'worn' && (
+              <>
+                <TouchableOpacity 
+                  style={[styles.secondaryButton, { borderColor }]}
+                  onPress={handleMarkAsClean}
+                >
+                  <IconSymbol name="checkmark.circle.fill" size={18} color={tintColor} />
+                  <ThemedText style={[styles.secondaryButtonText, { color: tintColor }]}>
+                    Mark as Clean
+                  </ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.secondaryButton, { borderColor }]}
+                  onPress={handleMarkAsDirty}
+                >
+                  <IconSymbol name="exclamationmark.circle.fill" size={18} color="#FF3B30" />
+                  <ThemedText style={[styles.secondaryButtonText, { color: '#FF3B30' }]}>
+                    Mark as Dirty
+                  </ThemedText>
+                </TouchableOpacity>
+              </>
+            )}
+            
+            {item.status === 'dirty' && (
               <TouchableOpacity 
                 style={[styles.secondaryButton, { borderColor }]}
                 onPress={handleMarkAsClean}
@@ -284,6 +425,37 @@ export default function WardrobeItemDetailScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Wear Tracking Section */}
+        {(item.last_worn_at || ((item.wear_count ?? 0) > 0)) && (
+          <View style={[styles.detailsCard, { backgroundColor }]}>
+            <ThemedText style={styles.detailBlockLabel}>WEAR HISTORY</ThemedText>
+            <View style={styles.wearHistoryRow}>
+              {item.last_worn_at && (
+                <View style={styles.wearHistoryItem}>
+                  <IconSymbol name="calendar" size={16} color={tintColor} />
+                  <View style={styles.wearHistoryText}>
+                    <ThemedText style={styles.wearHistoryLabel}>Last Worn</ThemedText>
+                    <ThemedText style={[styles.wearHistoryValue, { color: tintColor }]}>
+                      {formatLastWornWithFallback(item.last_worn_at)}
+                    </ThemedText>
+                  </View>
+                </View>
+              )}
+              {((item.wear_count ?? 0) > 0) ? (
+                <View style={styles.wearHistoryItem}>
+                  <IconSymbol name="tshirt.fill" size={16} color={tintColor} />
+                  <View style={styles.wearHistoryText}>
+                    <ThemedText style={styles.wearHistoryLabel}>Total Wears</ThemedText>
+                    <ThemedText style={[styles.wearHistoryValue, { color: tintColor }]}>
+                      {item.wear_count} {item.wear_count === 1 ? 'time' : 'times'}
+                    </ThemedText>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        )}
 
         {/* Item Metadata */}
         <View style={styles.metadataSection}>
@@ -562,6 +734,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.6,
     marginBottom: 4,
+  },
+  wearHistoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+  },
+  wearHistoryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  wearHistoryText: {
+    flexDirection: 'column',
+  },
+  wearHistoryLabel: {
+    fontSize: 11,
+    opacity: 0.6,
+    marginBottom: 2,
+  },
+  wearHistoryValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Background refetch indicator
+  refetchIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 8,
+    marginBottom: 8,
+  },
+  refetchText: {
+    fontSize: 12,
+    opacity: 0.6,
   },
 });
 

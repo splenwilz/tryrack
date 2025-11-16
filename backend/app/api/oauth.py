@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from typing import Optional
 import secrets
 import base64
+import asyncio
 from sqlalchemy.orm import Session
 
 from app.core.workos import workos_client
@@ -117,11 +118,53 @@ async def oauth_callback(
         print(f"🔍 OAuth Debug - Received code: {code}")
         print(f"🔍 OAuth Debug - Received state: {state}")
         
-        # Authenticate with WorkOS using the authorization code
+        # Authenticate with WorkOS using the authorization code with retry logic
+        # Retry on network/DNS errors (transient failures)
         # Documentation: https://workos.com/docs/authkit/react/python/2-add-authkit-to-your-app/add-a-callback-endpoint
-        auth_response = workos_client.user_management.authenticate_with_code(
-            code=code
-        )
+        # Use asyncio.sleep instead of time.sleep to avoid blocking the FastAPI event loop
+        max_retries = 3
+        retry_delay = 1  # Start with 1 second delay
+        
+        auth_response = None
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"🔍 OAuth Debug - WorkOS authentication attempt {attempt + 1}/{max_retries}")
+                auth_response = workos_client.user_management.authenticate_with_code(
+                    code=code
+                )
+                print(f"🔍 OAuth Debug - WorkOS auth response received successfully")
+                break  # Success, exit retry loop
+            except (OSError, TimeoutError, ConnectionError) as e:
+                # Network-related errors that are retryable
+                # OSError covers DNS resolution failures (e.g., "nodename nor servname")
+                # TimeoutError covers timeout scenarios
+                # ConnectionError covers connection failures
+                last_error = e
+                error_str = str(e)
+                is_network_error = True
+                print(f"⚠️ OAuth Debug - Network error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {error_str}")
+                
+                if attempt < max_retries - 1:
+                    # Retry with exponential backoff
+                    wait_time = retry_delay * (2 ** attempt)
+                    print(f"⚠️ OAuth Debug - Network error (attempt {attempt + 1}/{max_retries}): {error_str}")
+                    print(f"🔄 OAuth Debug - Retrying in {wait_time} seconds...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    # Max retries reached for network error
+                    print(f"❌ OAuth Debug - Failed after {max_retries} network retry attempts: {error_str}")
+                    raise
+            except Exception as e:
+                # Non-retryable errors - raise immediately
+                last_error = e
+                error_str = str(e)
+                print(f"❌ OAuth Debug - Non-network error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}: {error_str}")
+                raise
+        
+        if not auth_response:
+            raise Exception(f"WorkOS authentication failed after {max_retries} attempts: {last_error}")
         
         print(f"🔍 OAuth Debug - WorkOS auth response: {auth_response}")
         

@@ -8,7 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from app.db import get_db
 from app.core.auth import get_current_user_id
 from app.models import WardrobeItem, ProcessingStatus
-from app.schemas import WardrobeItemResponse, WardrobeItemCreate, WardrobeItemUpdate, WardrobeItemStatusUpdate
+from app.schemas import WardrobeItemResponse, WardrobeItemCreate, WardrobeItemUpdate, WardrobeItemStatusUpdate, BatchStatusUpdate
 from app.services import (
     get_wardrobe_items,
     get_wardrobe_item,
@@ -84,6 +84,8 @@ def serialize_wardrobe_items(items: List[WardrobeItem]) -> List[dict]:
             'status': item.status.value.lower() if hasattr(item.status, 'value') else str(item.status).lower(),
             'processing_status': item.processing_status.value.lower() if hasattr(item.processing_status, 'value') else str(item.processing_status).lower(),  # 🤖
             'ai_suggestions': item.ai_suggestions,  # 🤖
+            'last_worn_at': item.last_worn_at,  # When item was last worn
+            'wear_count': item.wear_count or 0,  # Total number of times item has been worn
             'created_at': item.created_at,
             'updated_at': item.updated_at,
         }
@@ -133,6 +135,8 @@ def serialize_wardrobe_item(item: WardrobeItem) -> dict:
         'status': item.status.value.lower() if hasattr(item.status, 'value') else str(item.status).lower(),
         'processing_status': item.processing_status.value.lower() if hasattr(item.processing_status, 'value') else str(item.processing_status).lower(),  # 🤖
         'ai_suggestions': item.ai_suggestions,  # 🤖
+        'last_worn_at': item.last_worn_at,  # When item was last worn
+        'wear_count': item.wear_count or 0,  # Total number of times item has been worn
         'created_at': item.created_at,
         'updated_at': item.updated_at,
     }
@@ -507,6 +511,55 @@ def update_wardrobe_item_status_endpoint(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     
     return serialize_wardrobe_item(updated_item)
+
+
+@router.patch("/batch-status")
+def update_wardrobe_items_batch_status(
+    batch_update: BatchStatusUpdate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """Batch update status for multiple wardrobe items.
+    
+    Useful for marking an entire outfit (multiple items) as worn at once.
+    """
+    if not batch_update.item_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="item_ids cannot be empty"
+        )
+    
+    updated_items = []
+    errors = []
+    
+    for item_id in batch_update.item_ids:
+        try:
+            item = get_wardrobe_item(db, item_id, user_id)
+            if not item:
+                errors.append(f"Item {item_id} not found")
+                continue
+            
+            updated_item = update_wardrobe_item_status(db, item, batch_update.status)
+            updated_items.append(serialize_wardrobe_item(updated_item))
+        except ValueError as e:
+            errors.append(f"Item {item_id}: {str(e)}")
+        except Exception as e:
+            logger.exception(f"Error updating item {item_id}: {e}")
+            errors.append(f"Item {item_id}: {str(e)}")
+    
+    if errors and not updated_items:
+        # All items failed
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to update items: {', '.join(errors)}"
+        )
+    
+    return {
+        "updated_items": updated_items,
+        "errors": errors if errors else None,
+        "total_updated": len(updated_items),
+        "total_requested": len(batch_update.item_ids)
+    }
 
 
 @router.delete("/{item_id}")

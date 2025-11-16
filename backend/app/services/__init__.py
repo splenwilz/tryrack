@@ -1,3 +1,4 @@
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from passlib.context import CryptContext
@@ -153,14 +154,44 @@ def update_wardrobe_item(db: Session, item: WardrobeItem, item_update: WardrobeI
 
 
 def update_wardrobe_item_status(db: Session, item: WardrobeItem, status: str) -> WardrobeItem:
-    """Update wardrobe item status."""
+    """Update wardrobe item status and track wear history.
+    
+    When status is "WORN":
+    - Sets last_worn_at to current timestamp
+    - Increments wear_count (with row-level locking to prevent race conditions)
+    
+    When status is "CLEAN" or "DIRTY":
+    - Only updates status, preserves last_worn_at and wear_count
+    
+    Uses row-level locking for "WORN" updates to prevent lost increments
+    when multiple concurrent requests update the same item simultaneously.
+    """
+    from datetime import datetime, timezone
+    
     status_upper = status.upper()
     if status_upper == "CLEAN":
         item.status = ItemStatus.CLEAN
+        # Keep last_worn_at and wear_count unchanged
     elif status_upper == "WORN":
-        item.status = ItemStatus.WORN
+        # Use atomic SQL UPDATE to increment wear_count safely across all database backends
+        # This works on SQLite, PostgreSQL, MySQL, etc. (db.refresh with for_update only works on some)
+        now = datetime.now(timezone.utc)
+        stmt = (
+            update(WardrobeItem)
+            .where(WardrobeItem.id == item.id)
+            .values(
+                status=ItemStatus.WORN,
+                last_worn_at=now,
+                wear_count=func.coalesce(WardrobeItem.wear_count, 0) + 1,
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        db.execute(stmt)
+        # Refresh to get updated values from database
+        db.refresh(item)
     elif status_upper == "DIRTY":
         item.status = ItemStatus.DIRTY
+        # Keep last_worn_at and wear_count unchanged
     else:
         raise ValueError(f"Invalid status: {status}")
     

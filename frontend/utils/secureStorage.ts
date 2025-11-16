@@ -281,25 +281,41 @@ export async function validateStoredToken(): Promise<boolean> {
       // Check if token is expired
       const currentTime = Math.floor(Date.now() / 1000);
       const expirationTime = payload.exp;
+      const timeRemaining = expirationTime - currentTime;
       
       if (currentTime >= expirationTime) {
-        console.warn('🔍 SecureStorage Debug - Access token expired');
-        console.log('🔍 SecureStorage Debug - Current time:', currentTime, 'Expiration:', expirationTime);
+        const expiredSecondsAgo = currentTime - expirationTime;
+        console.warn('🔍 Token Expiration Debug - Access token EXPIRED');
+        console.warn(`🔍 Token Expiration Debug - Expired ${expiredSecondsAgo} seconds ago`);
+        console.log('🔍 Token Expiration Debug - Current time:', new Date(currentTime * 1000).toISOString());
+        console.log('🔍 Token Expiration Debug - Expiration time:', new Date(expirationTime * 1000).toISOString());
         
-        // Check if refresh token exists - if so, don't clear data (will auto-refresh)
+        // Check if refresh token exists - if so, keep it for token refresh when connection returns
+        // This allows seamless re-authentication (token lifetime configured in backend, default: 7 days) even after temporary disconnections
         const refreshToken = await getRefreshToken();
         if (refreshToken) {
-          console.log('🔍 SecureStorage Debug - Refresh token available, will auto-refresh');
-          // Don't clear data - API client will handle refresh automatically
-          return false; // Token is expired but refresh is available
+          console.log('✅ Token Expiration Debug - Refresh token available! Token will auto-refresh on next API call');
+          console.log('✅ Token Expiration Debug - User stays logged in (refresh token lifetime configured in backend)');
+          // Don't clear data - keep refresh token for when connection is restored
+          // API client will handle refresh automatically when making requests
+          return false; // Token is expired but refresh token is available (lifetime configured in backend)
         } else {
-          console.warn('🔍 SecureStorage Debug - No refresh token, clearing stored data');
+          console.warn('❌ Token Expiration Debug - No refresh token, clearing stored data');
+          // Only clear if we truly have no way to refresh (no refresh token)
           await clearAllAuthData();
           return false;
         }
       }
       
-      console.log('🔍 SecureStorage Debug - Token is valid and not expired');
+      // Token is still valid - log time remaining
+      if (timeRemaining < 60) {
+        console.warn(`🔍 Token Expiration Debug - Token expires in ${timeRemaining} seconds (less than 1 minute!)`);
+      } else if (timeRemaining < 300) {
+        console.warn(`🔍 Token Expiration Debug - Token expires in ${Math.floor(timeRemaining / 60)} minutes`);
+      } else {
+        console.log(`🔍 Token Expiration Debug - Token valid, expires in ${Math.floor(timeRemaining / 60)} minutes`);
+      }
+      console.log('🔍 Token Expiration Debug - Token is valid and not expired');
       return true;
     } catch (decodeError) {
       console.error('🔍 SecureStorage Debug - Error decoding token:', decodeError);

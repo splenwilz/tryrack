@@ -194,7 +194,9 @@ export default function VirtualTryOnScreen() {
     : null;
   
   // Suggestions: fetch compatible items when first item is selected
-  const { data: suggestionsData, isLoading: isLoadingSuggestions } = useTryOnSuggestions(
+  // Use cached data when available (React Query provides cached data even while refetching)
+  // Reference: https://tanstack.com/query/latest/docs/framework/react/guides/caching
+  const { data: suggestionsData, isLoading: isLoadingSuggestions, isFetching: isFetchingSuggestions, error: suggestionsError } = useTryOnSuggestions(
     selectedItem?.category || null,
     selectedItem?.colors || null,
     user?.id ?? 0,
@@ -677,11 +679,19 @@ export default function VirtualTryOnScreen() {
             </ThemedText>
             <ThemedText style={[styles.suggestionsSubtitle, { color: '#999' }]}>
               Add items to create a complete outfit
+              {isFetchingSuggestions && !isLoadingSuggestions && suggestionsData && (
+                <ThemedText style={styles.suggestionsUpdatingText}> • Updating...</ThemedText>
+              )}
             </ThemedText>
             
-            {isLoadingSuggestions ? (
-              <ActivityIndicator size="small" color={tintColor} style={{ marginVertical: 20 }} />
-            ) : suggestionsData && suggestionsData.suggestions && suggestionsData.suggestions.length > 0 ? (
+            {/* Show error state if fetch failed (non-critical, suggestions are optional) */}
+            {suggestionsError && !suggestionsData ? (
+              <ThemedText style={[styles.suggestionsSubtitle, { color: '#999', textAlign: 'center', marginVertical: 20 }]}>
+                Unable to load suggestions. Try again later.
+              </ThemedText>
+            ) : isLoadingSuggestions && !suggestionsData ? (
+              <ActivityIndicator size="small" color={tintColor} style={styles.suggestionsLoadingIndicator} />
+            ) : suggestionsData?.suggestions && suggestionsData.suggestions.length > 0 ? (
               <ScrollView 
                 horizontal 
                 showsHorizontalScrollIndicator={false}
@@ -732,9 +742,12 @@ export default function VirtualTryOnScreen() {
                 ))}
               </ScrollView>
             ) : (
-              <ThemedText style={[styles.suggestionsSubtitle, { color: '#999', textAlign: 'center', marginVertical: 20 }]}>
-                No compatible items found in your wardrobe. Add more items to get suggestions!
-              </ThemedText>
+              // Only show empty state if we're not loading and have no data
+              !isLoadingSuggestions && (
+                <ThemedText style={[styles.suggestionsSubtitle, { color: '#999', textAlign: 'center', marginVertical: 20 }]}>
+                  No compatible items found in your wardrobe. Add more items to get suggestions!
+                </ThemedText>
+              )
             )}
           </View>
         )}
@@ -1360,6 +1373,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     marginBottom: 12,
+  },
+  suggestionsUpdatingText: {
+    fontSize: 11,
+    opacity: 0.6,
+  },
+  suggestionsLoadingIndicator: {
+    marginVertical: 20,
   },
   suggestionsScroll: {
     marginHorizontal: -20,

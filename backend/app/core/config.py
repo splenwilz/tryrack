@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Short-lived access tokens (industry standard: 15-60 min)
+    # TESTING: Access token expiration in seconds (temporary for testing refresh flow)
+    ACCESS_TOKEN_EXPIRE_SECONDS: int = 15  # TEMP: 15 seconds for testing (normally uses ACCESS_TOKEN_EXPIRE_MINUTES)
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Long-lived refresh tokens (industry standard: 7-30 days)
     ALGORITHM: str = "HS256"
     
